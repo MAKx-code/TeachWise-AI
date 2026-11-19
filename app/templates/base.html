@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TeachWise AI{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <a href="{{ url_for('main.dashboard') }}" class="brand-logo">
+        <div class="brand-icon">🎓</div>
+        <div class="brand-text">
+          <h1>TeachWise AI</h1>
+          <span>Faculty Intelligence Platform</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-label">Main</div>
+      <a href="{{ url_for('main.dashboard') }}"
+         class="nav-item {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+        <span class="nav-icon">◈</span> Overview
+      </a>
+      <a href="{{ url_for('main.lesson_studio') }}"
+         class="nav-item {% if request.endpoint == 'main.lesson_studio' %}active{% endif %}">
+        <span class="nav-icon">📋</span> Lesson Studio
+      </a>
+      <a href="{{ url_for('main.teaching_materials') }}"
+         class="nav-item {% if request.endpoint == 'main.teaching_materials' %}active{% endif %}">
+        <span class="nav-icon">📖</span> Teaching Materials
+      </a>
+      <a href="{{ url_for('main.assessment_studio') }}"
+         class="nav-item {% if request.endpoint == 'main.assessment_studio' %}active{% endif %}">
+        <span class="nav-icon">📝</span> Assessment Studio
+      </a>
+
+      <div class="nav-label" style="margin-top:12px;">Academic Data</div>
+      <a href="{{ url_for('academic.academic_data') }}"
+         class="nav-item {% if request.endpoint == 'academic.academic_data' %}active{% endif %}">
+        <span class="nav-icon">🎓</span> Academic Data
+      </a>
+      <a href="{{ url_for('academic.academic_analytics') }}"
+         class="nav-item {% if request.endpoint == 'academic.academic_analytics' %}active{% endif %}">
+        <span class="nav-icon">📊</span> CO &amp; Analytics
+      </a>
+
+      <div class="nav-label" style="margin-top:12px;">Analytics</div>
+      <a href="{{ url_for('main.student_analytics') }}"
+         class="nav-item {% if request.endpoint in ['main.student_analytics','main.analysis_detail'] %}active{% endif %}">
+        <span class="nav-icon">📈</span> Student Analytics
+      </a>
+      <a href="{{ url_for('main.learning_support') }}"
+         class="nav-item {% if request.endpoint == 'main.learning_support' %}active{% endif %}">
+        <span class="nav-icon">🧠</span> Learning Support
+      </a>
+      <a href="{{ url_for('main.faculty_analytics') }}"
+         class="nav-item {% if request.endpoint == 'main.faculty_analytics' %}active{% endif %}">
+        <span class="nav-icon">🔬</span> Faculty Analytics
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="granite-badge">
+        <div class="granite-dot"></div>
+        <span>IBM Granite · watsonx.ai</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

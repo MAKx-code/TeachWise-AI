@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Assessment Studio — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Assessment Studio</h2>
+    <p>Generate MCQs, questions and coding exercises with answer keys</p>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="grid-2 mb-3" style="gap:24px;">
+
+    <!-- Form -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📝 Generate Assessment</div>
+      </div>
+      <div class="panel-body">
+        <form id="assess-form">
+          <div class="form-group">
+            <label class="form-label">Topic *</label>
+            <input type="text" id="topic" class="form-control" placeholder="e.g., Sorting Algorithms" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Course Outcome (optional)</label>
+            <input type="text" id="co" class="form-control" placeholder="e.g., CO3: Apply sorting techniques">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Difficulty Level</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Easy" style="accent-color:var(--success);"> Easy
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Medium" checked style="accent-color:var(--warning);"> Medium
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Hard" style="accent-color:var(--danger);"> Hard
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Question Types</label>
+            <div class="checkbox-group">
+              <label class="checkbox-item">
+                <input type="checkbox" name="qtype" value="MCQ" checked> MCQ
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" name="qtype" value="Short Answer"> Short Answer
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" name="qtype" value="Long Answer"> Long Answer
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" name="qtype" value="Coding"> Coding
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Number of Questions</label>
+            <input type="number" id="num-q" class="form-control" value="5" min="1" max="20">
+          </div>
+          <button type="submit" id="generate-btn" class="btn btn-primary w-full">
+            ✦ Generate Assessment
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="panel" style="min-height:400px;">
+      <div class="panel-header">
+        <div class="panel-title" id="output-title">Generated Assessment</div>
+        <div class="flex gap-1" id="output-actions" style="display:none !important;">
+          <button class="btn btn-sm btn-success" id="approve-btn">✓ Approve</button>
+          <button class="btn btn-sm btn-secondary" id="toggle-answers-btn">👁 Show Answers</button>
+        </div>
+      </div>
+      <div id="output-content">
+        <div class="empty-state">
+          <div class="empty-icon">📝</div>
+          <h3>No assessment generated</h3>
+          <p>Configure your assessment and click Generate.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent -->
+  {% if recent %}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🕐 Recent Assessments</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Topic</th><th>Difficulty</th><th>Types</th><th>Questions</th><th>Created</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for a in recent %}
+            <tr>
+              <td style="color:var(--text);font-weight:500;">{{ a.topic }}</td>
+              <td><span class="badge {% if a.difficulty=='Easy' %}badge-success{% elif a.difficulty=='Hard' %}badge-danger{% else %}badge-warning{% endif %}">{{ a.difficulty }}</span></td>
+              <td class="text-muted text-sm">{{ a.question_types }}</td>
+              <td>{{ a.num_questions }}</td>
+              <td class="text-subtle text-sm">{{ a.created_at.strftime('%b %d, %H:%M') }}</td>
+              <td>
+                {% if a.approved %}
+                  <span class="badge badge-success">Approved</span>
+                {% else %}
+                  <span class="badge badge-muted">Draft</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentAssessId = null;
+let answersVisible = false;
+
+document.getElementById('assess-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('generate-btn');
+  const outputContent = document.getElementById('output-content');
+  const outputActions = document.getElementById('output-actions');
+
+  setLoading(btn, true, 'Generating with Granite...');
+  outputContent.innerHTML = `<div class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>IBM Granite is crafting your assessment…</p>
+  </div>`;
+
+  const qtypes = [...document.querySelectorAll('input[name="qtype"]:checked')].map(el => el.value);
+  if (!qtypes.length) {
+    showToast('Select at least one question type.', 'error');
+    setLoading(btn, false);
+    return;
+  }
+
+  const data = {
+    topic: document.getElementById('topic').value,
+    course_outcome: document.getElementById('co').value,
+    difficulty: document.querySelector('input[name="difficulty"]:checked')?.value || 'Medium',
+    question_types: qtypes,
+    num_questions: parseInt(document.getElementById('num-q').value) || 5,
+  };
+
+  const result = await apiPost('/api/assessment', data);
+  setLoading(btn, false);
+
+  if (result.error) {
+    outputContent.innerHTML = `<div class="alert alert-danger" style="margin:16px;">
+      <span>✕</span><span>${escapeHtml(result.error)}</span>
+    </div>`;
+    showToast(result.error, 'error');
+    return;
+  }
+
+  const assess = result.assessment;
+  currentAssessId = assess.id;
+  renderAssessment(assess, outputContent);
+  outputActions.style.cssText = 'display:flex !important;gap:8px;';
+  showToast(`${assess.questions.length} questions generated!`, 'success');
+});
+
+function renderAssessment(assess, container) {
+  if (!assess.questions || !assess.questions.length) {
+    container.innerHTML = `<div class="alert alert-warning" style="margin:16px;">
+      <span>⚠</span><span>Assessment generated but no questions could be parsed. ${escapeHtml(assess.error || '')}</span>
+    </div>`;
+    return;
+  }
+
+  const difficultyBadge = assess.difficulty === 'Easy' ? 'badge-success' : assess.difficulty === 'Hard' ? 'badge-danger' : 'badge-warning';
+  let html = `<div style="padding:16px 20px;">
+    <div class="flex gap-1 items-center mb-2">
+      <span class="badge badge-accent">${escapeHtml(assess.topic || '')}</span>
+      <span class="badge ${difficultyBadge}">${escapeHtml(assess.difficulty || '')}</span>
+      <span class="badge badge-muted">${assess.questions.length} questions · ${assess.total_marks || '?'} marks</span>
+    </div>
+    ${assess.instructions ? `<p class="text-sm text-muted mb-2">${escapeHtml(assess.instructions)}</p>` : ''}
+  `;
+
+  assess.questions.forEach(q => {
+    const typeClass = { MCQ: 'badge-accent', 'Short Answer': 'badge-secondary', 'Long Answer': 'badge-warning', Coding: 'badge-muted' };
+    html += `<div class="question-card">
+      <div class="question-header">
+        <span class="question-num">Q${q.number}</span>
+        <span class="badge ${typeClass[q.type] || 'badge-muted'}">${escapeHtml(q.type)}</span>
+        <span class="badge badge-muted">${q.marks || '?'} marks</span>
+      </div>
+      <div class="question-text">${escapeHtml(q.question)}</div>`;
+
+    if (q.options && q.options.length) {
+      html += `<ul class="options-list">`;
+      q.options.forEach(opt => {
+        const isCorrect = opt.startsWith(q.correct_answer);
+        html += `<li class="${isCorrect ? 'correct answer-reveal-item' : ''}">${escapeHtml(opt)}</li>`;
+      });
+      html += `</ul>`;
+    }
+
+    html += `<div class="answer-reveal" data-answer>
+      <strong>Answer:</strong> ${escapeHtml(q.correct_answer || '')}
+      ${q.explanation ? `<br><strong>Explanation:</strong> ${escapeHtml(q.explanation)}` : ''}
+      ${q.co_alignment ? `<br><span class="text-xs text-subtle">CO: ${escapeHtml(q.co_alignment)}</span>` : ''}
+    </div></div>`;
+  });
+
+  html += `<div class="faculty-notice mt-2">
+    <span>ℹ</span>
+    <span>AI-generated assessment. Verify all answers before distribution. Approve when satisfied.</span>
+  </div></div>`;
+
+  container.innerHTML = html;
+}
+
+document.getElementById('toggle-answers-btn').addEventListener('click', () => {
+  answersVisible = !answersVisible;
+  document.querySelectorAll('[data-answer]').forEach(el => el.classList.toggle('shown', answersVisible));
+  document.getElementById('toggle-answers-btn').textContent = answersVisible ? '🙈 Hide Answers' : '👁 Show Answers';
+});
+
+document.getElementById('approve-btn').addEventListener('click', async () => {
+  if (!currentAssessId) return;
+  const result = await apiPost(`/api/assessment/${currentAssessId}/approve`, {});
+  if (result.status === 'approved') showToast('Assessment approved!', 'success');
+});
+</script>
+{% endblock %}

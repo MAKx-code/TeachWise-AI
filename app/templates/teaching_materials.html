@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Teaching Materials — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Teaching Materials</h2>
+    <p>Generate lecture notes, examples, case studies and exercises</p>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="grid-2 mb-3" style="gap:24px;">
+
+    <!-- Generator Form -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📖 Generate Material</div>
+      </div>
+      <div class="panel-body">
+        <form id="material-form">
+          <div class="form-group">
+            <label class="form-label">Course Name</label>
+            <input type="text" id="course-name" class="form-control" placeholder="e.g., Data Structures & Algorithms">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Topic *</label>
+            <input type="text" id="topic" class="form-control" placeholder="e.g., Hash Tables" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Material Type</label>
+            <select id="material-type" class="form-control">
+              <option value="lecture_notes">Lecture Notes</option>
+              <option value="examples">Worked Examples</option>
+              <option value="case_study">Case Study</option>
+              <option value="exercises">Practice Exercises</option>
+              <option value="discussion">Discussion Questions</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Difficulty Level</label>
+            <div class="checkbox-group" style="gap:8px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Easy" style="accent-color:var(--success);"> Easy
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Medium" checked style="accent-color:var(--warning);"> Medium
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="difficulty" value="Hard" style="accent-color:var(--danger);"> Hard
+              </label>
+            </div>
+          </div>
+          <button type="submit" id="generate-btn" class="btn btn-primary w-full">
+            ✦ Generate Material
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="panel" id="output-panel" style="min-height:400px;">
+      <div class="panel-header">
+        <div class="panel-title">Generated Content</div>
+        <div class="flex gap-1" id="output-actions" style="display:none !important;">
+          <button class="btn btn-sm btn-success" id="approve-btn">✓ Approve</button>
+          <button class="btn btn-sm btn-secondary" id="copy-btn">⎘ Copy</button>
+        </div>
+      </div>
+      <div id="output-content">
+        <div class="empty-state">
+          <div class="empty-icon">📖</div>
+          <h3>No material generated</h3>
+          <p>Select a topic and material type, then click Generate.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Materials -->
+  {% if recent %}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🕐 Recent Materials</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Topic</th><th>Type</th><th>Difficulty</th><th>Created</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for mat in recent %}
+            <tr>
+              <td style="color:var(--text);font-weight:500;">{{ mat.topic }}</td>
+              <td class="text-muted">{{ mat.material_type.replace('_',' ').title() }}</td>
+              <td>
+                <span class="badge {% if mat.difficulty == 'Easy' %}badge-success{% elif mat.difficulty == 'Hard' %}badge-danger{% else %}badge-warning{% endif %}">
+                  {{ mat.difficulty }}
+                </span>
+              </td>
+              <td class="text-subtle text-sm">{{ mat.created_at.strftime('%b %d, %H:%M') }}</td>
+              <td>
+                {% if mat.approved %}
+                  <span class="badge badge-success">Approved</span>
+                {% else %}
+                  <span class="badge badge-muted">Draft</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentMatId = null;
+
+document.getElementById('material-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('generate-btn');
+  const outputContent = document.getElementById('output-content');
+  const outputActions = document.getElementById('output-actions');
+
+  setLoading(btn, true, 'Generating with Granite...');
+  outputContent.innerHTML = `<div class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>IBM Granite is generating your teaching material…</p>
+  </div>`;
+
+  const difficulty = document.querySelector('input[name="difficulty"]:checked')?.value || 'Medium';
+
+  const data = {
+    course_name: document.getElementById('course-name').value,
+    topic: document.getElementById('topic').value,
+    difficulty,
+    material_type: document.getElementById('material-type').value,
+  };
+
+  const result = await apiPost('/api/teaching-material', data);
+  setLoading(btn, false);
+
+  if (result.error) {
+    outputContent.innerHTML = `<div class="alert alert-danger" style="margin:16px;">
+      <span>✕</span><span>${escapeHtml(result.error)}</span>
+    </div>`;
+    showToast(result.error, 'error');
+    return;
+  }
+
+  currentMatId = result.id;
+  outputContent.innerHTML = `
+    <div class="ai-output">
+      <div class="ai-output-header">
+        <div class="ai-label"><div class="ai-dot"></div> IBM Granite · ${escapeHtml(data.material_type.replace('_',' '))} · <span class="badge badge-muted">${escapeHtml(difficulty)}</span></div>
+        <span class="badge badge-muted" id="mat-status">Draft</span>
+      </div>
+      <div class="ai-output-body" id="mat-body">${formatAiOutput(result.content)}</div>
+    </div>
+    <div class="faculty-notice mt-2">
+      <span>ℹ</span>
+      <span>AI-generated content. Verify technical accuracy before distributing to students.</span>
+    </div>`;
+  outputActions.style.cssText = 'display:flex !important;gap:8px;';
+  showToast('Material generated!', 'success');
+});
+
+document.getElementById('approve-btn').addEventListener('click', async () => {
+  if (!currentMatId) return;
+  const result = await apiPost(`/api/teaching-material/${currentMatId}/approve`, {});
+  if (result.status === 'approved') {
+    showToast('Material approved!', 'success');
+    const statusEl = document.getElementById('mat-status');
+    if (statusEl) { statusEl.textContent = 'Approved'; statusEl.className = 'badge badge-success'; }
+  }
+});
+
+document.getElementById('copy-btn')?.addEventListener('click', () => {
+  const body = document.getElementById('mat-body');
+  if (body) {
+    navigator.clipboard.writeText(body.innerText || body.textContent);
+    showToast('Copied to clipboard', 'success');
+  }
+});
+</script>
+{% endblock %}

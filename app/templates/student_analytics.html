@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Student Analytics — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Student Analytics</h2>
+    <p>Upload CSV data to analyse class performance and identify learning gaps</p>
+  </div>
+  <a href="{{ url_for('main.download_demo_csv') }}" class="btn btn-secondary">↓ Demo CSV</a>
+</div>
+
+<div class="page-body">
+
+  <!-- Upload Panel -->
+  <div class="panel mb-3">
+    <div class="panel-header">
+      <div class="panel-title">📤 Upload Student Data</div>
+    </div>
+    <div class="panel-body">
+      <div class="grid-2 gap-2 items-start">
+        <div>
+          <div id="upload-zone" class="upload-zone">
+            <div class="upload-icon">📄</div>
+            <h3>Drop CSV here or click to upload</h3>
+            <p id="zone-label">Required: student_id, attendance_pct. Optional: quiz_basics, quiz_loops, quiz_arrays, assignment_score</p>
+          </div>
+          <input type="file" id="csv-input" accept=".csv" style="display:none;">
+        </div>
+        <div>
+          <div class="form-group">
+            <label class="form-label">Course Name</label>
+            <input type="text" id="course-name" class="form-control" placeholder="e.g., Data Structures">
+          </div>
+          <div class="alert alert-info">
+            <span>ℹ</span>
+            <span>Download the Demo CSV to try with synthetic student data before uploading real records.</span>
+          </div>
+          <button id="upload-btn" class="btn btn-primary w-full">
+            ▶ Run Analysis Pipeline
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipeline Progress -->
+      <div id="upload-progress-wrap" class="mt-3">
+        <div class="panel-header" style="padding:12px 0 8px;border:none;border-bottom:1px solid var(--border);">
+          <div class="panel-title">🔄 Analysis Pipeline</div>
+        </div>
+        <div id="pipeline-stages" class="pipeline-track mt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results (shown after upload) -->
+  <div id="results-section" style="display:none;">
+
+    <!-- Summary Stats -->
+    <div class="stats-grid mb-3" id="result-stats"></div>
+
+    <!-- Charts + AI Interpretation -->
+    <div class="grid-2 mb-3" style="gap:20px;">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📊 Topic Performance</div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-container tall">
+            <canvas id="topicChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🏫 Attendance Distribution</div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-container">
+            <canvas id="attendanceChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2 mb-3" style="gap:20px;">
+      <!-- AI Interpretation -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><div class="ai-dot" style="display:inline-block;margin-right:8px;"></div> AI Performance Analysis</div>
+        </div>
+        <div class="panel-body">
+          <div id="ai-interpretation" style="font-size:13.5px;line-height:1.7;color:var(--text-muted);"></div>
+        </div>
+      </div>
+
+      <!-- At-Risk Students -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">⚠ Students Needing Attention</div>
+        </div>
+        <div class="panel-body" style="padding:0;" id="at-risk-panel">
+          <div class="empty-state" style="padding:24px;">
+            <p>No at-risk students detected.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Learning Gaps -->
+    <div class="panel mb-3" id="gaps-panel">
+      <div class="panel-header">
+        <div class="panel-title">🔍 Detected Learning Gaps</div>
+        <a href="{{ url_for('main.learning_support') }}" class="btn btn-sm btn-primary">View Support Plans →</a>
+      </div>
+      <div class="panel-body" id="gaps-content"></div>
+    </div>
+
+  </div>
+
+  <!-- Previous Sessions -->
+  {% if sessions %}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🕐 Previous Analysis Sessions</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Course</th><th>File</th><th>Students</th><th>Avg Attendance</th><th>Avg Score</th><th>Date</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for s in sessions %}
+            <tr>
+              <td style="color:var(--text);font-weight:500;">{{ s.course_name }}</td>
+              <td class="text-muted text-sm">{{ s.filename }}</td>
+              <td>{{ s.num_students }}</td>
+              <td>{{ '%.1f'|format(s.avg_attendance) if s.avg_attendance else '—' }}%</td>
+              <td>{{ '%.1f'|format(s.avg_score) if s.avg_score else '—' }}%</td>
+              <td class="text-subtle text-sm">{{ s.created_at.strftime('%b %d, %H:%M') }}</td>
+              <td><a href="{{ url_for('main.analysis_detail', session_id=s.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initUploadZone('upload-zone', 'csv-input');
+let topicChart = null, attendanceChart = null;
+
+document.getElementById('upload-btn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('csv-input');
+  if (!fileInput.files.length) {
+    showToast('Please select a CSV file first.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('upload-btn');
+  const progressWrap = document.getElementById('upload-progress-wrap');
+  const pipelineEl = document.getElementById('pipeline-stages');
+  setLoading(btn, true, 'Running Pipeline...');
+  progressWrap.style.display = 'block';
+  document.getElementById('results-section').style.display = 'none';
+
+  // Show initial pipeline stages as pending
+  const initialStages = [
+    {stage: 'Data Validation', status: 'pending'},
+    {stage: 'Performance Calculations', status: 'pending'},
+    {stage: 'AI Performance Interpretation (Granite)', status: 'pending'},
+    {stage: 'Learning Gap Detection', status: 'pending'},
+    {stage: 'AI Gap Explanations (Granite)', status: 'pending'},
+    {stage: 'Personalized Learning Support (Granite)', status: 'pending'},
+  ];
+  renderStageLog(initialStages, 'pipeline-stages');
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('course_name', document.getElementById('course-name').value || 'Engineering Course');
+
+  const result = await apiPostForm('/api/upload-csv', formData);
+  setLoading(btn, false);
+
+  if (result.error) {
+    renderStageLog(result.stage_log || initialStages, 'pipeline-stages');
+    showToast(result.error, 'error');
+    return;
+  }
+
+  renderStageLog(result.stage_log, 'pipeline-stages');
+  renderResults(result);
+  document.getElementById('results-section').style.display = 'block';
+  showToast('Analysis complete!', 'success');
+});
+
+function renderResults(result) {
+  const perf = result.performance;
+  if (!perf) return;
+
+  // Stats
+  const statsEl = document.getElementById('result-stats');
+  statsEl.innerHTML = `
+    <div class="stat-card accent">
+      <div class="stat-label">Students</div>
+      <div class="stat-value">${perf.num_students}</div>
+      <div class="stat-sub">Records analysed</div>
+    </div>
+    <div class="stat-card ${perf.avg_attendance < 75 ? 'warning' : 'success'}">
+      <div class="stat-label">Avg Attendance</div>
+      <div class="stat-value">${perf.avg_attendance !== null ? perf.avg_attendance + '%' : '—'}</div>
+      <div class="stat-sub">${perf.attendance_distribution ? `${perf.attendance_distribution.below_60} below 60%` : ''}</div>
+    </div>
+    <div class="stat-card ${perf.overall_avg_score < 60 ? 'warning' : 'success'}">
+      <div class="stat-label">Avg Score</div>
+      <div class="stat-value">${perf.overall_avg_score !== null ? perf.overall_avg_score + '%' : '—'}</div>
+      <div class="stat-sub">Across all topics</div>
+    </div>
+    <div class="stat-card ${perf.at_risk_students?.length > 0 ? 'danger' : 'success'}">
+      <div class="stat-label">At Risk</div>
+      <div class="stat-value">${perf.at_risk_students?.length || 0}</div>
+      <div class="stat-sub">Need attention</div>
+    </div>`;
+
+  // Topic chart
+  if (perf.topic_stats) {
+    const labels = Object.keys(perf.topic_stats).map(k => k.replace('quiz_','').replace('_',' ').replace(/\b\w/g, l=>l.toUpperCase()));
+    const means = Object.values(perf.topic_stats).map(s => s.mean);
+    const below50 = Object.values(perf.topic_stats).map(s => s.below_50_pct);
+
+    if (topicChart) topicChart.destroy();
+    topicChart = new Chart(document.getElementById('topicChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Class Avg (%)', data: means, backgroundColor: 'rgba(34,211,238,0.5)', borderColor: 'rgba(34,211,238,0.9)', borderWidth: 1.5 },
+          { label: 'Below 50% (% of students)', data: below50, backgroundColor: 'rgba(248,81,73,0.4)', borderColor: 'rgba(248,81,73,0.8)', borderWidth: 1.5 },
+        ],
+      },
+      options: { ...chartDefaults, plugins: { ...chartDefaults.plugins, legend: { labels: { color: '#8b949e', font: { size: 12 } } } } },
+    });
+  }
+
+  // Attendance distribution chart
+  if (perf.attendance_distribution) {
+    const ad = perf.attendance_distribution;
+    if (attendanceChart) attendanceChart.destroy();
+    attendanceChart = new Chart(document.getElementById('attendanceChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Below 60%', '60–75%', '75–90%', 'Above 90%'],
+        datasets: [{ data: [ad.below_60, ad['60_to_75'], ad['75_to_90'], ad.above_90],
+          backgroundColor: ['rgba(248,81,73,0.7)', 'rgba(210,153,34,0.7)', 'rgba(34,211,238,0.5)', 'rgba(63,185,80,0.7)'],
+          borderWidth: 0 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#8b949e', font: { size: 11 } }, position: 'bottom' },
+          tooltip: chartDefaults.plugins.tooltip,
+        },
+      },
+    });
+  }
+
+  // AI interpretation
+  const aiEl = document.getElementById('ai-interpretation');
+  if (result.ai_interpretation) {
+    aiEl.innerHTML = formatAiOutput(result.ai_interpretation);
+  } else {
+    aiEl.textContent = 'AI interpretation unavailable — Granite may be offline.';
+  }
+
+  // At-risk students
+  const atRiskPanel = document.getElementById('at-risk-panel');
+  if (perf.at_risk_students?.length) {
+    let html = '<div class="table-wrap"><table class="table"><thead><tr><th>Student ID</th><th>Attendance</th><th>Flags</th></tr></thead><tbody>';
+    perf.at_risk_students.forEach(s => {
+      html += `<tr>
+        <td style="color:var(--text);font-weight:600;">${escapeHtml(s.student_id)}</td>
+        <td>${s.attendance !== null ? s.attendance + '%' : '—'}</td>
+        <td>${s.reasons.map(r => `<span class="badge badge-warning" style="margin:1px;">${escapeHtml(r)}</span>`).join(' ')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    atRiskPanel.innerHTML = html;
+  }
+
+  // Gaps
+  const gapsContent = document.getElementById('gaps-content');
+  if (result.gaps?.length) {
+    gapsContent.innerHTML = result.gaps.map(g => `
+      <div class="card gap-${g.severity.toLowerCase()} mb-2" style="margin-bottom:12px;">
+        <div class="flex gap-1 items-center mb-1">
+          <span style="font-weight:600;color:var(--text);">${escapeHtml(g.topic)}</span>
+          <span class="badge ${g.severity==='Critical'?'badge-danger':g.severity==='Significant'?'badge-warning':'badge-secondary'}">${g.severity}</span>
+          <span class="badge badge-muted">Avg: ${g.mean_score}%</span>
+        </div>
+        <p class="text-sm text-muted mb-1">${escapeHtml(g.reason)}</p>
+        ${g.intervention ? `<p class="text-sm" style="color:var(--accent);">💡 ${escapeHtml(g.intervention)}</p>` : ''}
+        ${g.priority_action ? `<p class="text-xs text-subtle mt-1">Priority: ${escapeHtml(g.priority_action)}</p>` : ''}
+      </div>`).join('');
+  } else {
+    gapsContent.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No significant learning gaps detected in this dataset.</p></div>';
+  }
+}
+</script>
+{% endblock %}

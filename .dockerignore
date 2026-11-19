@@ -1,0 +1,15 @@
+# .dockerignore — files excluded from Docker build context
+.env
+*.pyc
+__pycache__/
+venv/
+env/
+.venv/
+*.db
+*.sqlite3
+instance/
+uploads/
+.git/
+.gitignore
+*.md
+test_app.py

@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% block title %}Academic Data — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Academic Data</h2>
+    <p>Syllabus, students, attendance, assessments, questions, resources and feedback</p>
+  </div>
+  <div class="flex gap-1">
+    {% if courses %}
+    <select id="course-selector" class="form-control" style="width:220px;" onchange="window.location='/academic?course_id='+this.value">
+      {% for c in courses %}
+      <option value="{{ c.id }}" {% if course and c.id == course.id %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+  </div>
+</div>
+
+<div class="page-body">
+
+  {% if not course %}
+  <div class="empty-state"><div class="empty-icon">🎓</div><h3>No courses yet</h3></div>
+  {% else %}
+
+  <!-- Summary Stats -->
+  <div class="stats-grid mb-3">
+    <div class="stat-card accent">
+      <div class="stat-label">Students</div>
+      <div class="stat-value">{{ students|length }}</div>
+      <div class="stat-sub">Enrolled in {{ course.code }}</div>
+    </div>
+    <div class="stat-card secondary">
+      <div class="stat-label">Syllabus Units</div>
+      <div class="stat-value">{{ units|length }}</div>
+    </div>
+    <div class="stat-card success">
+      <div class="stat-label">Course Outcomes</div>
+      <div class="stat-value">{{ cos|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Questions</div>
+      <div class="stat-value">{{ questions|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Resources</div>
+      <div class="stat-value">{{ resources|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Feedback Records</div>
+      <div class="stat-value">{{ feedback|length }}</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div id="academic-tabs">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tab-syllabus">📚 Syllabus & COs</button>
+      <button class="tab-btn" data-tab="tab-students">👥 Students</button>
+      <button class="tab-btn" data-tab="tab-resources">📎 Resources</button>
+      <button class="tab-btn" data-tab="tab-questions">❓ Question Bank</button>
+      <button class="tab-btn" data-tab="tab-import">📤 Import Data</button>
+      <button class="tab-btn" data-tab="tab-imports-log">📋 Import Log</button>
+    </div>
+
+    <!-- Syllabus & COs -->
+    <div id="tab-syllabus" class="tab-panel active">
+      <div class="grid-2 gap-2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Syllabus Units</div></div>
+          <div class="panel-body" style="padding:0;">
+            <table class="table">
+              <thead><tr><th>#</th><th>Title</th><th>Description</th></tr></thead>
+              <tbody>
+                {% for u in units %}
+                <tr>
+                  <td><span class="badge badge-muted">{{ u.unit_number }}</span></td>
+                  <td style="color:var(--text);font-weight:500;">{{ u.title }}</td>
+                  <td class="text-sm text-muted">{{ (u.description or '')[:80] }}{% if u.description and u.description|length > 80 %}…{% endif %}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Course Outcomes</div></div>
+          <div class="panel-body" style="padding:0;">
+            <table class="table">
+              <thead><tr><th>CO</th><th>Statement</th><th>Bloom's</th></tr></thead>
+              <tbody>
+                {% for co in cos %}
+                <tr>
+                  <td><span class="badge badge-accent">{{ co.co_code }}</span></td>
+                  <td class="text-sm" style="color:var(--text);">{{ co.statement }}</td>
+                  <td><span class="badge badge-secondary">{{ co.bloom_level or '—' }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Students -->
+    <div id="tab-students" class="tab-panel">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Enrolled Students — {{ course.code }}</div>
+          <span class="badge badge-muted">{{ students|length }} students</span>
+        </div>
+        <div class="panel-body" style="padding:0;max-height:420px;overflow-y:auto;">
+          <table class="table">
+            <thead><tr><th>Student ID</th><th>Section</th><th>Batch</th><th>Attendance %</th></tr></thead>
+            <tbody>
+              {% for s in students %}
+              <tr>
+                <td style="font-family:var(--mono);font-weight:600;color:var(--text);">{{ s.student_code }}</td>
+                <td class="text-muted">{{ s.section or '—' }}</td>
+                <td class="text-muted">{{ s.batch_year or '—' }}</td>
+                <td>
+                  {% if s.student_code in att_stats %}
+                    {% set att = att_stats[s.student_code] %}
+                    <span {% if att < 60 %}style="color:var(--danger);"{% elif att < 75 %}style="color:var(--warning);"{% else %}style="color:var(--success);"{% endif %}>{{ att }}%</span>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if students|length > 10 %}
+        <div style="padding:8px 16px;font-size:12px;color:var(--text-subtle);">Showing all {{ students|length }} enrolled students. Attendance preview shows first 10.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Resources -->
+    <div id="tab-resources" class="tab-panel">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Learning Resources</div></div>
+        <div class="panel-body" style="padding:0;">
+          <table class="table">
+            <thead><tr><th>Title</th><th>Type</th><th>Unit</th><th>Link</th></tr></thead>
+            <tbody>
+              {% for r in resources %}
+              <tr>
+                <td style="color:var(--text);font-weight:500;">{{ r.title }}</td>
+                <td><span class="badge {% if r.resource_type == 'video' %}badge-accent{% elif r.resource_type == 'pdf' %}badge-warning{% else %}badge-secondary{% endif %}">{{ r.resource_type }}</span></td>
+                <td class="text-muted text-sm">{{ r.unit.title if r.unit else '—' }}</td>
+                <td>
+                  {% if r.url_or_path %}
+                  <a href="{{ r.url_or_path }}" target="_blank" style="color:var(--accent);font-size:12px;">Open ↗</a>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Question Bank -->
+    <div id="tab-questions" class="tab-panel">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Question Bank</div>
+          <span class="badge badge-muted">{{ questions|length }} questions</span>
+        </div>
+        <div class="panel-body" style="padding:0;max-height:420px;overflow-y:auto;">
+          <table class="table">
+            <thead><tr><th>#</th><th>Question</th><th>Type</th><th>Difficulty</th><th>Unit</th></tr></thead>
+            <tbody>
+              {% for q in questions %}
+              <tr>
+                <td class="text-subtle">{{ loop.index }}</td>
+                <td style="font-size:12.5px;color:var(--text);">{{ q.question_text[:80] }}{% if q.question_text|length > 80 %}…{% endif %}</td>
+                <td><span class="badge badge-muted">{{ q.question_type }}</span></td>
+                <td><span class="badge {% if q.difficulty=='Easy' %}badge-success{% elif q.difficulty=='Hard' %}badge-danger{% else %}badge-warning{% endif %}">{{ q.difficulty }}</span></td>
+                <td class="text-muted text-sm">{{ q.unit.title[:20] if q.unit else '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Data -->
+    <div id="tab-import" class="tab-panel">
+      <div class="grid-2 gap-2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">📤 Upload Academic Data</div></div>
+          <div class="panel-body">
+            <div class="form-group">
+              <label class="form-label">Data Type</label>
+              <select id="import-type" class="form-control">
+                <option value="attendance">Attendance Records</option>
+                <option value="exam_marks">Exam Marks</option>
+                <option value="quiz_results">Quiz Results</option>
+                <option value="assignment_submissions">Assignment Submissions</option>
+                <option value="students">Student Records</option>
+                <option value="question_bank">Question Bank</option>
+                <option value="feedback">Student Feedback</option>
+              </select>
+            </div>
+            <div id="imp-upload-zone" class="upload-zone">
+              <div class="upload-icon">📄</div>
+              <h3>Drop CSV here or click to upload</h3>
+              <p id="imp-zone-label">Select data type above, then upload a CSV file</p>
+            </div>
+            <input type="file" id="imp-csv-input" accept=".csv" style="display:none;">
+            <div class="mt-2 flex gap-1">
+              <button id="validate-btn" class="btn btn-secondary w-full">🔍 Validate Only</button>
+              <button id="import-btn" class="btn btn-primary w-full">▶ Validate & Import</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="validation-result-panel">
+          <div class="panel-header"><div class="panel-title">Validation Report</div></div>
+          <div class="panel-body" id="validation-result-body">
+            <div class="empty-state" style="padding:24px;">
+              <div class="empty-icon">🔍</div>
+              <p>Upload a CSV and click Validate to see the report.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Log -->
+    <div id="tab-imports-log" class="tab-panel">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Import History</div></div>
+        <div class="panel-body" style="padding:0;">
+          {% if recent_imports %}
+          <table class="table">
+            <thead><tr><th>Type</th><th>File</th><th>Total</th><th>Valid</th><th>Rejected</th><th>Warnings</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              {% for imp in recent_imports %}
+              <tr>
+                <td><span class="badge badge-muted">{{ imp.import_type }}</span></td>
+                <td class="text-sm text-muted">{{ imp.filename or '—' }}</td>
+                <td>{{ imp.total_records }}</td>
+                <td style="color:var(--success);">{{ imp.valid_records }}</td>
+                <td style="color:{% if imp.rejected_records > 0 %}var(--danger){% else %}var(--text-muted){% endif %};">{{ imp.rejected_records }}</td>
+                <td style="color:{% if imp.warning_count > 0 %}var(--warning){% else %}var(--text-muted){% endif %};">{{ imp.warning_count }}</td>
+                <td><span class="badge {% if imp.status=='imported' %}badge-success{% elif imp.status=='rejected' %}badge-danger{% else %}badge-muted{% endif %}">{{ imp.status }}</span></td>
+                <td class="text-xs text-subtle">{{ imp.imported_at.strftime('%b %d, %H:%M') }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="empty-state" style="padding:32px;"><p>No imports yet.</p></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+initTabs('academic-tabs');
+initUploadZone('imp-upload-zone', 'imp-csv-input');
+
+const courseId = {{ course.id if course else 'null' }};
+
+async function runValidation(doImport, forceWarnings) {
+  const fileInput = document.getElementById('imp-csv-input');
+  if (!fileInput.files.length) { showToast('Select a CSV file first.', 'error'); return; }
+
+  const btn = doImport ? document.getElementById('import-btn') : document.getElementById('validate-btn');
+  setLoading(btn, true, doImport ? 'Importing...' : 'Validating...');
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('import_type', document.getElementById('import-type').value);
+  if (courseId) formData.append('course_id', courseId);
+  if (forceWarnings) formData.append('force_with_warnings', 'true');
+
+  const url = doImport ? '/api/academic/import' : '/api/academic/validate';
+  const result = await apiPostForm(url, formData);
+  setLoading(btn, false);
+
+  renderValidationReport(result, doImport);
+}
+
+document.getElementById('validate-btn').addEventListener('click', () => runValidation(false, false));
+document.getElementById('import-btn').addEventListener('click', () => runValidation(true, false));
+
+function renderValidationReport(result, doImport) {
+  const body = document.getElementById('validation-result-body');
+  const report = result.report || result;
+
+  if (result.error && !report.total) {
+    body.innerHTML = `<div class="alert alert-danger"><span>✕</span><span>${escapeHtml(result.error)}</span></div>`;
+    showToast(result.error, 'error');
+    return;
+  }
+
+  let html = `<div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" style="font-size:22px;">${report.total}</div></div>
+    <div class="stat-card success"><div class="stat-label">Valid</div><div class="stat-value" style="font-size:22px;color:var(--success);">${report.valid}</div></div>
+    <div class="stat-card ${report.rejected > 0 ? 'danger' : ''}"><div class="stat-label">Rejected</div><div class="stat-value" style="font-size:22px;${report.rejected > 0 ? 'color:var(--danger);' : ''}">${report.rejected}</div></div>
+    <div class="stat-card ${report.warning_count > 0 ? 'warning' : ''}"><div class="stat-label">Warnings</div><div class="stat-value" style="font-size:22px;${report.warning_count > 0 ? 'color:var(--warning);' : ''}">${report.warning_count}</div></div>
+  </div>`;
+
+  if (result.status === 'imported') {
+    html += `<div class="alert alert-success"><span>✓</span><span>${escapeHtml(result.message)}</span></div>`;
+  } else if (result.status === 'rejected') {
+    html += `<div class="alert alert-danger"><span>✕</span><span>${escapeHtml(result.message)}</span></div>`;
+  } else if (result.status === 'warnings' && !doImport) {
+    html += `<div class="alert alert-warning"><span>⚠</span><span>${escapeHtml(result.message)}</span>
+      <button class="btn btn-sm btn-primary" style="margin-left:12px;" onclick="runValidation(true, true)">Import Anyway</button></div>`;
+  }
+
+  if (report.errors && report.errors.length) {
+    html += `<div style="margin-bottom:12px;"><div class="text-xs text-subtle mb-1" style="text-transform:uppercase;">Errors (${report.errors.length})</div>`;
+    report.errors.slice(0, 20).forEach(e => {
+      html += `<div style="padding:6px 10px;background:rgba(248,81,73,0.08);border-left:3px solid var(--danger);border-radius:3px;margin-bottom:4px;font-size:12.5px;">
+        <span style="color:var(--text-subtle);">Row ${e.row} · ${escapeHtml(e.field)}:</span> ${escapeHtml(e.issue)}
+        <span class="text-subtle"> → ${escapeHtml(e.suggestion)}</span></div>`;
+    });
+    if (report.errors.length > 20) html += `<div class="text-xs text-subtle">… and ${report.errors.length - 20} more errors.</div>`;
+    html += '</div>';
+  }
+
+  if (report.warnings && report.warnings.length) {
+    html += `<div><div class="text-xs text-subtle mb-1" style="text-transform:uppercase;">Warnings (${report.warnings.length})</div>`;
+    report.warnings.slice(0, 10).forEach(w => {
+      html += `<div style="padding:6px 10px;background:rgba(210,153,34,0.08);border-left:3px solid var(--warning);border-radius:3px;margin-bottom:4px;font-size:12.5px;">
+        <span style="color:var(--text-subtle);">Row ${w.row} · ${escapeHtml(w.field)}:</span> ${escapeHtml(w.issue)}</div>`;
+    });
+    html += '</div>';
+  }
+
+  body.innerHTML = html || '<p class="text-muted">No issues found.</p>';
+  if (result.status === 'imported') showToast(result.message, 'success');
+  else if (result.status === 'rejected') showToast('Import rejected — fix errors first.', 'error');
+}
+</script>
+{% endblock %}

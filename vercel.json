@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "run.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "run.py"
+    }
+  ],
+  "env": {
+    "WATSONX_URL": "https://us-south.ml.cloud.ibm.com",
+    "WATSONX_MODEL_ID": "ibm/granite-3-8b-instruct"
+  }
+}

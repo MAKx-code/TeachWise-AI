@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Lesson Studio — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Lesson Studio</h2>
+    <p>AI-generated lesson plans aligned with your course outcomes</p>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="grid-2 mb-3" style="gap:24px;">
+
+    <!-- Generator Form -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📋 Generate Lesson Plan</div>
+      </div>
+      <div class="panel-body">
+        <form id="lesson-form">
+          <div class="form-group">
+            <label class="form-label">Subject / Course *</label>
+            <input type="text" id="subject" class="form-control" placeholder="e.g., Data Structures & Algorithms" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Topic *</label>
+            <input type="text" id="topic" class="form-control" placeholder="e.g., Binary Search Trees" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Course Outcomes *</label>
+            <textarea id="course-outcomes" class="form-control" rows="3"
+              placeholder="e.g., CO1: Understand tree data structures, CO2: Implement BST operations"></textarea>
+          </div>
+          <div class="grid-2 gap-2">
+            <div class="form-group">
+              <label class="form-label">Duration</label>
+              <select id="duration" class="form-control">
+                <option>60 minutes</option>
+                <option>90 minutes</option>
+                <option>45 minutes</option>
+                <option>120 minutes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Student Level</label>
+              <select id="student-level" class="form-control">
+                <option>Undergraduate (Year 2)</option>
+                <option>Undergraduate (Year 1)</option>
+                <option>Undergraduate (Year 3)</option>
+                <option>Postgraduate</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Teaching Approach</label>
+            <input type="text" id="teaching-approach" class="form-control"
+              placeholder="e.g., Flipped classroom, Case-based, Lecture + Lab">
+          </div>
+          <button type="submit" id="generate-btn" class="btn btn-primary w-full">
+            ✦ Generate Lesson Plan
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Output Panel -->
+    <div class="panel" id="output-panel" style="min-height:400px;">
+      <div class="panel-header">
+        <div class="panel-title">
+          <div class="ai-dot" id="ai-dot" style="display:none;"></div>
+          Generated Plan
+        </div>
+        <div class="flex gap-1" id="output-actions" style="display:none !important;">
+          <button class="btn btn-sm btn-success" id="approve-btn">✓ Approve</button>
+          <button class="btn btn-sm btn-secondary" id="copy-btn">⎘ Copy</button>
+        </div>
+      </div>
+      <div id="output-content">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <h3>No plan generated yet</h3>
+          <p>Fill in the form and click Generate to create an AI-powered lesson plan.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Plans -->
+  {% if recent %}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🕐 Recent Lesson Plans</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Topic</th><th>Duration</th><th>Level</th><th>Created</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for lesson in recent %}
+            <tr>
+              <td style="color:var(--text);font-weight:500;">{{ lesson.topic }}</td>
+              <td class="text-muted">{{ lesson.duration }}</td>
+              <td class="text-muted">{{ lesson.student_level }}</td>
+              <td class="text-subtle text-sm">{{ lesson.created_at.strftime('%b %d, %H:%M') }}</td>
+              <td>
+                {% if lesson.approved %}
+                  <span class="badge badge-success">Approved</span>
+                {% else %}
+                  <span class="badge badge-muted">Draft</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentLessonId = null;
+
+document.getElementById('lesson-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('generate-btn');
+  const aiDot = document.getElementById('ai-dot');
+  const outputContent = document.getElementById('output-content');
+  const outputActions = document.getElementById('output-actions');
+
+  setLoading(btn, true, 'Generating with Granite...');
+  aiDot.style.display = 'inline-block';
+  outputContent.innerHTML = `<div class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>IBM Granite is crafting your lesson plan…</p>
+  </div>`;
+  outputActions.style.display = 'none !important';
+
+  const data = {
+    subject: document.getElementById('subject').value,
+    topic: document.getElementById('topic').value,
+    course_outcomes: document.getElementById('course-outcomes').value,
+    duration: document.getElementById('duration').value,
+    student_level: document.getElementById('student-level').value,
+    teaching_approach: document.getElementById('teaching-approach').value,
+  };
+
+  const result = await apiPost('/api/lesson-plan', data);
+  setLoading(btn, false);
+  aiDot.style.display = 'none';
+
+  if (result.error) {
+    outputContent.innerHTML = `<div class="alert alert-danger" style="margin:16px;">
+      <span>✕</span><span>${escapeHtml(result.error)}</span>
+    </div>`;
+    showToast(result.error, 'error');
+    return;
+  }
+
+  currentLessonId = result.id;
+  outputContent.innerHTML = `
+    <div class="ai-output">
+      <div class="ai-output-header">
+        <div class="ai-label"><div class="ai-dot"></div> IBM Granite · Lesson Plan</div>
+        <span class="badge badge-muted">Draft — Pending Faculty Approval</span>
+      </div>
+      <div class="ai-output-body" id="plan-body">${formatAiOutput(result.plan)}</div>
+    </div>
+    <div class="faculty-notice mt-2">
+      <span>ℹ</span>
+      <span>AI-generated content. Review for accuracy before use in class. Click Approve when satisfied.</span>
+    </div>`;
+  outputActions.style.cssText = 'display:flex !important;gap:8px;';
+  showToast('Lesson plan generated!', 'success');
+});
+
+document.getElementById('approve-btn').addEventListener('click', async () => {
+  if (!currentLessonId) return;
+  const result = await apiPost(`/api/lesson-plan/${currentLessonId}/approve`, {});
+  if (result.status === 'approved') {
+    showToast('Lesson plan approved!', 'success');
+    document.querySelector('.badge-muted')?.classList.replace('badge-muted', 'badge-success');
+    document.querySelector('.badge-success').textContent = 'Approved';
+  }
+});
+
+document.getElementById('copy-btn')?.addEventListener('click', () => {
+  const body = document.getElementById('plan-body');
+  if (body) {
+    navigator.clipboard.writeText(body.innerText || body.textContent);
+    showToast('Copied to clipboard', 'success');
+  }
+});
+</script>
+{% endblock %}

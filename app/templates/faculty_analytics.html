@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}Faculty Analytics — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Faculty Analytics</h2>
+    <p>Class performance insights, trends and suggested actions</p>
+  </div>
+  <a href="{{ url_for('main.student_analytics') }}" class="btn btn-secondary">↑ Upload Data</a>
+</div>
+
+<div class="page-body">
+
+  {% if not performance %}
+  <div class="empty-state" style="padding:80px 24px;">
+    <div class="empty-icon">📈</div>
+    <h3>No analytics data</h3>
+    <p>Upload student performance data via Student Analytics to see class insights here.</p>
+    <a href="{{ url_for('main.student_analytics') }}" class="btn btn-primary mt-2">Upload Student Data</a>
+  </div>
+  {% else %}
+
+  {% if latest_session %}
+  <div class="alert alert-info mb-3">
+    <span>◈</span>
+    <span>Showing analytics for <strong>{{ latest_session.course_name }}</strong> —
+      {{ latest_session.num_students }} students,
+      uploaded {{ latest_session.created_at.strftime('%b %d, %Y') }}.
+    </span>
+  </div>
+  {% endif %}
+
+  <!-- Stats -->
+  <div class="stats-grid mb-3">
+    <div class="stat-card accent">
+      <div class="stat-label">Students Analysed</div>
+      <div class="stat-value">{{ performance.num_students }}</div>
+    </div>
+    <div class="stat-card {% if performance.avg_attendance and performance.avg_attendance < 75 %}warning{% else %}success{% endif %}">
+      <div class="stat-label">Avg Attendance</div>
+      <div class="stat-value">{{ performance.avg_attendance }}%</div>
+      <div class="stat-sub">{{ performance.attendance_distribution.below_60 }} students below 60%</div>
+    </div>
+    <div class="stat-card {% if performance.overall_avg_score and performance.overall_avg_score < 60 %}warning{% else %}success{% endif %}">
+      <div class="stat-label">Overall Avg Score</div>
+      <div class="stat-value">{{ performance.overall_avg_score }}%</div>
+    </div>
+    <div class="stat-card {% if performance.at_risk_students|length > 0 %}danger{% else %}success{% endif %}">
+      <div class="stat-label">At-Risk Students</div>
+      <div class="stat-value">{{ performance.at_risk_students|length }}</div>
+      <div class="stat-sub">Need faculty attention</div>
+    </div>
+  </div>
+
+  <div class="grid-2 mb-3" style="gap:20px;">
+    <!-- Topic Performance Chart -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📊 Topic-Wise Performance</div>
+      </div>
+      <div class="panel-body">
+        <div class="chart-container tall">
+          <canvas id="topicBarChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Score Distribution Chart -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📉 Score Distribution</div>
+      </div>
+      <div class="panel-body">
+        <div class="chart-container tall">
+          <canvas id="scoreDistChart"></canvas>
+        </div>
+        {% if performance.score_distribution %}
+        <div class="mt-2" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;text-align:center;">
+          <div><div style="font-size:18px;font-weight:700;color:var(--danger);">{{ performance.score_distribution.below_40 }}</div><div class="text-xs text-subtle">&lt;40%</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--warning);">{{ performance.score_distribution['40_to_60'] }}</div><div class="text-xs text-subtle">40–60%</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--accent);">{{ performance.score_distribution['60_to_75'] }}</div><div class="text-xs text-subtle">60–75%</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--success);">{{ performance.score_distribution['75_to_90'] }}</div><div class="text-xs text-subtle">75–90%</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--success);">{{ performance.score_distribution.above_90 }}</div><div class="text-xs text-subtle">&gt;90%</div></div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Topic Stats Table -->
+  {% if performance.topic_stats %}
+  <div class="panel mb-3">
+    <div class="panel-header">
+      <div class="panel-title">📋 Topic-Wise Statistics</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Topic</th><th>Mean</th><th>Median</th><th>Std Dev</th><th>Min</th><th>Max</th><th>Below 50%</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for col, stats in performance.topic_stats.items() %}
+            <tr>
+              <td style="color:var(--text);font-weight:500;">
+                {{ col.replace('quiz_','').replace('_',' ').title() }}
+              </td>
+              <td>{{ stats.mean }}%</td>
+              <td>{{ stats.median }}%</td>
+              <td>{{ stats.std }}</td>
+              <td>{{ stats.min }}%</td>
+              <td>{{ stats.max }}%</td>
+              <td>
+                <div>{{ stats.below_50_pct }}%</div>
+                <div class="progress-wrap" style="margin-top:4px;width:80px;">
+                  <div class="progress-bar {% if stats.below_50_pct > 50 %}danger{% elif stats.below_50_pct > 25 %}warning{% else %}success{% endif %}"
+                       style="width:{{ stats.below_50_pct }}%;"></div>
+                </div>
+              </td>
+              <td>
+                {% if stats.mean >= 70 %}
+                  <span class="badge badge-success">Strong</span>
+                {% elif stats.mean >= 55 %}
+                  <span class="badge badge-warning">Moderate</span>
+                {% else %}
+                  <span class="badge badge-danger">Weak</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Gaps Summary -->
+  {% if gaps %}
+  <div class="panel mb-3">
+    <div class="panel-header">
+      <div class="panel-title">🔍 Learning Gap Summary</div>
+      <a href="{{ url_for('main.learning_support') }}" class="btn btn-sm btn-primary">View Full Plans →</a>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">
+        {% for gap in gaps %}
+        <div style="padding:14px;background:var(--surface-2);border-radius:var(--radius-sm);border-left:3px solid {% if gap.severity=='Critical' %}var(--danger){% elif gap.severity=='Significant' %}var(--warning){% else %}var(--secondary){% endif %};">
+          <div class="flex gap-1 items-center mb-1">
+            <span style="font-weight:600;color:var(--text);">{{ gap.topic }}</span>
+            <span class="badge {% if gap.severity=='Critical' %}badge-danger{% elif gap.severity=='Significant' %}badge-warning{% else %}badge-secondary{% endif %}">{{ gap.severity }}</span>
+          </div>
+          <div class="text-sm text-muted">Avg: {{ gap.mean_score }}% · {{ gap.below_50_pct }}% failing</div>
+          {% if gap.priority_action %}
+          <div class="text-xs text-subtle mt-1">→ {{ gap.priority_action }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Per-Student Table -->
+  {% if performance.per_student %}
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">👤 Per-Student Summary</div>
+      <span class="badge badge-muted">{{ performance.per_student|length }} students</span>
+    </div>
+    <div class="panel-body" style="padding:0;max-height:400px;overflow-y:auto;">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Attendance</th>
+              {% for col in performance.available_topic_columns %}
+              <th>{{ col.replace('quiz_','').replace('_',' ').title() }}</th>
+              {% endfor %}
+              <th>Overall</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in performance.per_student %}
+            <tr>
+              <td style="font-weight:600;color:var(--text);font-family:var(--mono);">{{ s.student_id }}</td>
+              <td>
+                {% if s.attendance_pct is defined %}
+                <span {% if s.attendance_pct < 60 %}style="color:var(--danger);"{% endif %}>{{ s.attendance_pct }}%</span>
+                {% else %}—{% endif %}
+              </td>
+              {% for col in performance.available_topic_columns %}
+              <td>
+                {% if s[col] is defined %}
+                <span {% if s[col] < 40 %}style="color:var(--danger);"{% elif s[col] < 60 %}style="color:var(--warning);"{% endif %}>{{ s[col] }}%</span>
+                {% else %}—{% endif %}
+              </td>
+              {% endfor %}
+              <td>
+                {% if s.overall is defined %}
+                <span {% if s.overall < 50 %}style="color:var(--danger);"{% elif s.overall < 65 %}style="color:var(--warning);"{% else %}style="color:var(--success);"{% endif %}>
+                  {{ s.overall }}%
+                </span>
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if performance and performance.topic_stats %}
+<script>
+const topicLabels = {{ performance.topic_stats.keys()|list|tojson }};
+const displayLabels = topicLabels.map(k => k.replace('quiz_','').replace('_',' ').replace(/\b\w/g, l=>l.toUpperCase()));
+const topicMeans = topicLabels.map(k => {{ performance.topic_stats|tojson }}[k]?.mean || 0);
+
+new Chart(document.getElementById('topicBarChart'), {
+  type: 'bar',
+  data: {
+    labels: displayLabels,
+    datasets: [{
+      label: 'Class Average (%)',
+      data: topicMeans,
+      backgroundColor: topicMeans.map(v => v < 50 ? 'rgba(248,81,73,0.6)' : v < 65 ? 'rgba(210,153,34,0.6)' : 'rgba(34,211,238,0.6)'),
+      borderWidth: 0,
+      borderRadius: 4,
+    }]
+  },
+  options: { ...chartDefaults, plugins: { legend: { display: false }, tooltip: chartDefaults.plugins.tooltip } },
+});
+
+{% if performance.score_distribution %}
+const sd = {{ performance.score_distribution|tojson }};
+new Chart(document.getElementById('scoreDistChart'), {
+  type: 'bar',
+  data: {
+    labels: ['<40%', '40–60%', '60–75%', '75–90%', '>90%'],
+    datasets: [{
+      label: 'Students',
+      data: [sd.below_40, sd['40_to_60'], sd['60_to_75'], sd['75_to_90'], sd.above_90],
+      backgroundColor: ['rgba(248,81,73,0.6)','rgba(210,153,34,0.6)','rgba(34,211,238,0.5)','rgba(63,185,80,0.5)','rgba(63,185,80,0.7)'],
+      borderWidth: 0,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    ...chartDefaults,
+    scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, max: undefined, beginAtZero: true } },
+    plugins: { legend: { display: false }, tooltip: chartDefaults.plugins.tooltip }
+  },
+});
+{% endif %}
+</script>
+{% endif %}
+{% endblock %}

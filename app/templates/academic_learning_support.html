@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}Academic Learning Support — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2 class="page-title">Academic Learning Support</h2>
+    <p class="page-subtitle">Gap-matched resources, at-risk student support and AI-generated remediation plans</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <!-- Course selector -->
+    <form method="get" style="margin:0;">
+      <select name="placeholder" class="form-control" onchange="window.location='/academic/learning-support/' + this.value" style="min-width:220px;">
+        {% for c in courses %}
+        <option value="{{ c.id }}" {% if c.id == course.id %}selected{% endif %}>
+          {{ c.code }} — {{ c.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    <button class="btn btn-primary" id="gen-support-btn" onclick="generateSupportPlan()">
+      Generate AI Support Plan
+    </button>
+  </div>
+</div>
+
+<!-- Overview cards -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-value">{{ topic_perf | length }}</div>
+    <div class="stat-label">Total Topics</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--danger)">{{ weak_topics | length }}</div>
+    <div class="stat-label">Weak Topics</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--danger)">{{ at_risk_students | length }}</div>
+    <div class="stat-label">At-Risk Students</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--accent)">
+      {{ weak_resources.values() | map(attribute='resources') | map('length') | sum }}
+    </div>
+    <div class="stat-label">Support Resources</div>
+  </div>
+</div>
+
+<!-- Weak topics with resources -->
+{% if weak_topics %}
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header">
+    <h3 class="card-title">Topics Requiring Attention</h3>
+    <span class="badge badge-muted">With linked learning resources</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px;">
+  {% for tp in weak_topics %}
+  <div style="padding:16px;background:var(--surface);border-radius:8px;border-left:4px solid
+    {% if tp.gap_severity == 'Critical' %}var(--danger)
+    {% elif tp.gap_severity == 'Significant' %}#f59e0b
+    {% else %}#3b82f6{% endif %};">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <h4 style="margin:0;font-size:15px;font-weight:600;">Unit {{ tp.unit_number }}: {{ tp.title }}</h4>
+        <span style="font-size:13px;color:var(--text-muted);">
+          Combined avg: <strong style="color:{% if tp.combined_avg_pct and tp.combined_avg_pct < 50 %}var(--danger){% elif tp.combined_avg_pct and tp.combined_avg_pct < 65 %}#f59e0b{% else %}var(--success){% endif %}">
+            {{ tp.combined_avg_pct ~ '%' if tp.combined_avg_pct is not none else 'N/A' }}
+          </strong>
+        </span>
+      </div>
+      <span class="badge {% if tp.gap_severity == 'Critical' %}badge-danger{% elif tp.gap_severity == 'Significant' %}badge-warning{% else %}badge-info{% endif %}">
+        {{ tp.gap_severity }}
+      </span>
+    </div>
+
+    <!-- Resources for this topic -->
+    {% if tp.unit_id in weak_resources and weak_resources[tp.unit_id].resources %}
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Recommended Resources</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      {% for r in weak_resources[tp.unit_id].resources %}
+        <a href="{{ r.url or '#' }}" target="{{ '_blank' if r.url else '_self' }}"
+           style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--accent);text-decoration:none;transition:border-color 0.2s;"
+           onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+          <span>{% if r.type == 'video' %}▶ {% elif r.type == 'link' %}🔗 {% elif r.type == 'textbook' %}📖 {% else %}📄 {% endif %}</span>
+          {{ r.title }}
+        </a>
+      {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div style="font-size:13px;color:var(--text-muted);">No resources linked. Add resources in Academic Data.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card" style="margin-bottom:24px;padding:32px;text-align:center;">
+  <div style="font-size:40px;margin-bottom:12px;">✓</div>
+  <h3 style="margin-bottom:8px;">No significant gaps detected</h3>
+  <p style="color:var(--text-muted);">All topics are performing at or above threshold.</p>
+</div>
+{% endif %}
+
+<!-- At-risk students -->
+{% if at_risk_students %}
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header">
+    <h3 class="card-title">At-Risk Students</h3>
+    <span class="badge badge-danger">{{ at_risk_students | length }} identified</span>
+  </div>
+  <div class="at-risk-note" style="padding:10px 16px;background:rgba(239,68,68,0.08);border-radius:6px;margin-bottom:12px;font-size:13px;color:var(--text-muted);">
+    These students were identified by configurable criteria (attendance &lt; 60% or avg score &lt; 50%). Faculty review required before intervention.
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">
+  {% for s in at_risk_students %}
+  <div style="padding:14px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-weight:700;font-size:15px;">{{ s.student_code }}</span>
+      <span class="badge {% if s.priority == 'High' %}badge-danger{% else %}badge-warning{% endif %}">{{ s.priority }}</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">
+      Attendance: <strong style="color:{% if s.attendance_pct < 60 %}var(--danger){% else %}inherit{% endif %}">{{ s.attendance_pct }}%</strong>
+      &nbsp;|&nbsp;
+      Score: <strong style="color:{% if s.avg_score_pct and s.avg_score_pct < 50 %}var(--danger){% else %}inherit{% endif %}">{{ s.avg_score_pct ~ '%' if s.avg_score_pct is not none else 'N/A' }}</strong>
+    </div>
+    {% for reason in s.reasons %}
+    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">• {{ reason }}</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Topic performance table -->
+<div class="card" style="margin-bottom:24px;">
+  <div class="card-header">
+    <h3 class="card-title">Full Topic Performance</h3>
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr><th>Unit</th><th>Topic</th><th>Quiz Avg</th><th>Assignment Avg</th><th>Combined</th><th>Gap</th></tr>
+    </thead>
+    <tbody>
+    {% for tp in topic_perf %}
+    <tr>
+      <td>{{ tp.unit_number }}</td>
+      <td>{{ tp.title }}</td>
+      <td>{{ tp.quiz_avg_pct ~ '%' if tp.quiz_avg_pct is not none else '—' }}</td>
+      <td>{{ tp.assignment_avg_pct ~ '%' if tp.assignment_avg_pct is not none else '—' }}</td>
+      <td><strong>{{ tp.combined_avg_pct ~ '%' if tp.combined_avg_pct is not none else '—' }}</strong></td>
+      <td>
+        <span class="badge
+          {% if tp.gap_severity == 'Critical' %}badge-danger
+          {% elif tp.gap_severity == 'Significant' %}badge-warning
+          {% elif tp.gap_severity == 'Moderate' %}badge-info
+          {% else %}badge-success{% endif %}">
+          {{ tp.gap_severity }}
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- AI Support Plan output panel -->
+<div id="support-plan-panel" class="card" style="display:none;margin-bottom:24px;">
+  <div class="card-header">
+    <h3 class="card-title">AI-Generated Support Plan</h3>
+    <span class="badge badge-muted">Faculty approval required before sharing with students</span>
+  </div>
+  <div id="support-plan-stages" style="margin-bottom:16px;"></div>
+  <div id="support-plan-content"></div>
+
+  <!-- Approval buttons -->
+  <div id="support-plan-approval" style="display:none;margin-top:20px;padding:16px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+    <h4 style="margin-bottom:12px;font-size:14px;font-weight:600;">Faculty Review</h4>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+      These recommendations are advisory. Review for accuracy before sharing with students or taking action.
+    </p>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" onclick="approvePlan()">Approve &amp; Adopt</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('support-plan-panel').style.display='none'">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const courseId = {{ course.id }};
+
+async function generateSupportPlan() {
+  const btn = document.getElementById('gen-support-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  document.getElementById('support-plan-panel').style.display = 'block';
+  document.getElementById('support-plan-stages').innerHTML = '<div style="color:var(--text-muted);padding:8px;">Running DB pipeline + Granite...</div>';
+  document.getElementById('support-plan-content').innerHTML = '';
+  document.getElementById('support-plan-approval').style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/academic/db-pipeline/${courseId}`, { method: 'POST' });
+    const data = await res.json();
+
+    // Stage log
+    let stageHtml = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">';
+    for (const s of (data.stage_log || [])) {
+      const icon = s.status === 'success' ? '✓' : s.status === 'failed' ? '✗' : '…';
+      const color = s.status === 'success' ? 'var(--success)' : s.status === 'failed' ? 'var(--danger)' : 'var(--accent)';
+      stageHtml += `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:var(--surface);border-radius:6px;border-left:3px solid ${color};">
+        <span style="color:${color};font-weight:700;min-width:16px;">${icon}</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;">${s.stage}</div>
+          <div style="font-size:12px;color:var(--text-muted);">${s.message || s.error || ''}</div>
+        </div>
+      </div>`;
+    }
+    stageHtml += '</div>';
+    document.getElementById('support-plan-stages').innerHTML = stageHtml;
+
+    // Support plan
+    let planHtml = '';
+    const plan = data.support_plan;
+    if (plan) {
+      if (plan.executive_summary) {
+        planHtml += `<div style="padding:14px 16px;background:var(--surface);border-radius:8px;border-left:4px solid var(--accent);margin-bottom:16px;">
+          <strong style="font-size:13px;color:var(--accent);">EXECUTIVE SUMMARY</strong>
+          <p style="margin-top:6px;font-size:14px;line-height:1.6;">${plan.executive_summary}</p>
+        </div>`;
+      }
+
+      if (plan.topic_support_plans && plan.topic_support_plans.length > 0) {
+        planHtml += '<h4 style="margin-bottom:12px;font-size:14px;font-weight:600;">Topic Support Plans</h4>';
+        planHtml += '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">';
+        for (const tsp of plan.topic_support_plans) {
+          planHtml += `<div style="padding:14px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <strong>${tsp.topic}</strong>
+              <span class="badge badge-${tsp.severity === 'Critical' ? 'danger' : 'warning'}">${tsp.severity || ''}</span>
+            </div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">${tsp.revision_strategy || ''}</p>
+            ${(tsp.practice_activities || []).map(a => `<div style="font-size:12px;padding:4px 0;">• ${a}</div>`).join('')}
+          </div>`;
+        }
+        planHtml += '</div>';
+      }
+
+      if (plan.faculty_actions && plan.faculty_actions.length > 0) {
+        planHtml += '<h4 style="margin-bottom:12px;font-size:14px;font-weight:600;">Faculty Actions</h4>';
+        planHtml += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">';
+        for (const fa of plan.faculty_actions) {
+          const pColor = fa.priority === 'High' ? 'var(--danger)' : fa.priority === 'Medium' ? '#f59e0b' : '#6b7280';
+          planHtml += `<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 14px;background:var(--surface);border-radius:6px;">
+            <span style="color:${pColor};font-weight:700;font-size:12px;min-width:40px;">${fa.priority}</span>
+            <div>
+              <div style="font-size:13px;font-weight:500;">${fa.action}</div>
+              <div style="font-size:12px;color:var(--text-muted);">${fa.timeline || ''}</div>
+            </div>
+          </div>`;
+        }
+        planHtml += '</div>';
+      }
+
+      if (plan.disclaimer) {
+        planHtml += `<p style="font-size:12px;color:var(--text-muted);font-style:italic;border-top:1px solid var(--border);padding-top:12px;">${plan.disclaimer}</p>`;
+      }
+    } else if (data.error) {
+      planHtml = `<div style="color:var(--danger);">Pipeline error: ${data.error}</div>`;
+    } else {
+      planHtml = '<div style="color:var(--text-muted);">No support plan generated.</div>';
+    }
+
+    document.getElementById('support-plan-content').innerHTML = planHtml;
+    if (plan) document.getElementById('support-plan-approval').style.display = 'block';
+    btn.textContent = 'Generate AI Support Plan';
+    btn.disabled = false;
+  } catch (err) {
+    document.getElementById('support-plan-stages').innerHTML = `<div style="color:var(--danger);">Error: ${err.message}</div>`;
+    btn.textContent = 'Generate AI Support Plan';
+    btn.disabled = false;
+  }
+}
+
+function approvePlan() {
+  document.getElementById('support-plan-approval').innerHTML =
+    '<div style="color:var(--success);font-weight:600;">Plan approved by faculty. Recommendations are advisory — adapt before sharing with students.</div>';
+  if (window.showToast) showToast('Support plan approved by faculty.', 'success');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Learning Support — TeachWise AI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-info">
+    <h2>Learning Support</h2>
+    <p>Personalized learning plans generated from actual detected gaps</p>
+  </div>
+  <a href="{{ url_for('main.student_analytics') }}" class="btn btn-secondary">↑ Upload New Data</a>
+</div>
+
+<div class="page-body">
+
+  {% if not support_plan and not gaps %}
+  <div class="empty-state" style="padding:80px 24px;">
+    <div class="empty-icon">🧠</div>
+    <h3>No learning support data yet</h3>
+    <p>Upload student performance data in Student Analytics to generate personalized learning support plans.</p>
+    <a href="{{ url_for('main.student_analytics') }}" class="btn btn-primary mt-2">Go to Student Analytics</a>
+  </div>
+  {% else %}
+
+  {% if latest_session %}
+  <div class="alert alert-info mb-3">
+    <span>◈</span>
+    <span>Showing results for <strong>{{ latest_session.course_name }}</strong> —
+      {{ latest_session.num_students }} students,
+      uploaded {{ latest_session.created_at.strftime('%b %d, %Y at %H:%M') }}.
+      <a href="{{ url_for('main.student_analytics') }}" style="color:var(--accent);">Upload newer data</a>
+    </span>
+  </div>
+  {% endif %}
+
+  <!-- Pipeline Stage Log -->
+  {% if stage_log %}
+  <div class="panel mb-3">
+    <div class="panel-header">
+      <div class="panel-title">🔄 Pipeline Execution Log</div>
+    </div>
+    <div class="panel-body" style="padding:12px;">
+      <div class="pipeline-track">
+        {% for stage in stage_log %}
+        <div class="pipeline-stage">
+          <div class="stage-icon {{ stage.status }}">
+            {% if stage.status == 'success' %}✓{% elif stage.status == 'failed' %}✕{% else %}○{% endif %}
+          </div>
+          <div class="stage-name">{{ stage.stage }}</div>
+          <div class="stage-message">
+            {{ stage.message or stage.error or '' }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Detected Gaps -->
+  {% if gaps %}
+  <div class="panel mb-3">
+    <div class="panel-header">
+      <div class="panel-title">🔍 Detected Learning Gaps</div>
+      <span class="badge badge-muted">{{ gaps|length }} gaps</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;">
+        {% for gap in gaps %}
+        <div class="card gap-{{ gap.severity|lower }}" style="border-left:3px solid {% if gap.severity=='Critical' %}var(--danger){% elif gap.severity=='Significant' %}var(--warning){% else %}var(--secondary){% endif %};">
+          <div class="flex gap-1 items-center mb-1">
+            <span style="font-weight:600;color:var(--text);">{{ gap.topic }}</span>
+            <span class="badge {% if gap.severity=='Critical' %}badge-danger{% elif gap.severity=='Significant' %}badge-warning{% else %}badge-secondary{% endif %}">{{ gap.severity }}</span>
+          </div>
+          <div class="text-sm text-muted mb-1">Avg: {{ gap.mean_score }}% · {{ gap.below_50_pct }}% below 50%</div>
+          <div class="text-sm" style="color:var(--text-muted);">{{ gap.reason }}</div>
+          {% if gap.intervention %}
+          <div class="text-sm mt-1" style="color:var(--accent);">💡 {{ gap.intervention }}</div>
+          {% endif %}
+          {% if gap.remediation_activities %}
+          <div class="mt-2">
+            {% for act in gap.remediation_activities %}
+            <div class="text-xs text-subtle">• {{ act }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Support Plan -->
+  {% if support_plan %}
+  <div id="support-plan-section">
+
+    <div class="faculty-notice mb-3">
+      <span>ℹ</span>
+      <span><strong>Faculty Review Required:</strong> {{ support_plan.disclaimer or 'These recommendations are advisory. Review and adapt before sharing with students.' }}</span>
+    </div>
+
+    <!-- Executive Summary -->
+    {% if support_plan.executive_summary %}
+    <div class="panel mb-3">
+      <div class="panel-header">
+        <div class="panel-title"><div class="ai-dot" style="display:inline-block;margin-right:8px;"></div> Executive Summary</div>
+      </div>
+      <div class="panel-body">
+        <p style="font-size:14.5px;line-height:1.7;color:var(--text-muted);">{{ support_plan.executive_summary }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Revision Timetable -->
+    {% if support_plan.class_intervention_plan and support_plan.class_intervention_plan.weekly_plan %}
+    <div class="panel mb-3">
+      <div class="panel-header">
+        <div class="panel-title">📅 Weekly Revision Timetable</div>
+      </div>
+      <div class="panel-body">
+        {% if support_plan.class_intervention_plan.immediate_actions %}
+        <div class="mb-2">
+          <div class="text-xs text-subtle mb-1" style="text-transform:uppercase;letter-spacing:.06em;">Immediate Actions</div>
+          {% for action in support_plan.class_intervention_plan.immediate_actions %}
+          <div style="padding:6px 10px;background:var(--surface-2);border-radius:4px;margin-bottom:4px;font-size:13px;color:var(--text-muted);">
+            → {{ action }}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="timetable-grid">
+          {% for day in support_plan.class_intervention_plan.weekly_plan %}
+          <div class="timetable-day">
+            <div class="day-name">{{ day.day }}</div>
+            <div class="day-activity">{{ day.activity }}</div>
+            {% if day.focus_topic %}
+            <div class="day-duration" style="color:var(--accent);margin-top:4px;">{{ day.focus_topic }}</div>
+            {% endif %}
+            <div class="day-duration">{{ day.duration }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Topic Support Plans -->
+    {% if support_plan.topic_support_plans %}
+    <div class="panel mb-3">
+      <div class="panel-header">
+        <div class="panel-title">📚 Topic-Specific Support Plans</div>
+      </div>
+      <div class="panel-body">
+        {% for tp in support_plan.topic_support_plans %}
+        <div class="card mb-2" style="margin-bottom:14px;">
+          <div class="flex gap-1 items-center mb-2">
+            <span style="font-weight:600;color:var(--text);">{{ tp.topic }}</span>
+            <span class="badge {% if tp.severity=='Critical' %}badge-danger{% elif tp.severity=='Significant' %}badge-warning{% else %}badge-secondary{% endif %}">{{ tp.severity }}</span>
+            {% if tp.expected_improvement_weeks %}
+            <span class="badge badge-muted">~{{ tp.expected_improvement_weeks }} weeks</span>
+            {% endif %}
+          </div>
+          <p class="text-sm text-muted mb-2">{{ tp.revision_strategy }}</p>
+          {% if tp.practice_activities %}
+          <div class="mb-2">
+            <div class="text-xs text-subtle mb-1">Practice Activities</div>
+            {% for act in tp.practice_activities %}
+            <div class="text-sm" style="padding:4px 8px;background:var(--surface-2);border-radius:3px;margin-bottom:3px;color:var(--text-muted);">• {{ act }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if tp.recommended_resources %}
+          <div>
+            <div class="text-xs text-subtle mb-1">Resources</div>
+            {% for res in tp.recommended_resources %}
+            <div class="text-sm text-muted">📎 {{ res }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Faculty Actions -->
+    {% if support_plan.faculty_actions %}
+    <div class="panel mb-3">
+      <div class="panel-header">
+        <div class="panel-title">✅ Faculty Action Items</div>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Action</th><th>Timeline</th><th>Priority</th></tr></thead>
+            <tbody>
+              {% for action in support_plan.faculty_actions %}
+              <tr>
+                <td style="color:var(--text);">{{ action.action }}</td>
+                <td class="text-muted">{{ action.timeline }}</td>
+                <td><span class="badge {% if action.priority=='High' %}badge-danger{% elif action.priority=='Medium' %}badge-warning{% else %}badge-success{% endif %}">{{ action.priority }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- At-Risk Strategy -->
+    {% if support_plan.at_risk_student_strategy %}
+    <div class="panel mb-3">
+      <div class="panel-header">
+        <div class="panel-title">⚠ At-Risk Student Strategy</div>
+      </div>
+      <div class="panel-body">
+        {% set strategy = support_plan.at_risk_student_strategy %}
+        {% if strategy.identification_criteria %}
+        <p class="text-sm text-muted mb-2">Criteria: {{ strategy.identification_criteria }}</p>
+        {% endif %}
+        {% if strategy.support_steps %}
+        <div class="mb-2">
+          {% for step in strategy.support_steps %}
+          <div style="padding:6px 10px;background:var(--surface-2);border-radius:4px;margin-bottom:4px;font-size:13px;color:var(--text-muted);">{{ loop.index }}. {{ step }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+  {% endif %}
+
+  {% if not support_plan %}
+  <div class="alert alert-warning">
+    <span>⚠</span>
+    <span>Support plan generation failed or was skipped. The gap analysis above is based on computed statistics.</span>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}
