@@ -154,17 +154,24 @@ if page == "Overview":
                  'Severity': t['gap_severity']}
                 for t in tp if t['combined_avg_pct'] is not None
             ])
-            st.bar_chart(chart_df.set_index('Topic')['Combined Avg %'])
+            if not chart_df.empty:
+                st.bar_chart(chart_df.set_index('Topic')['Combined Avg %'])
+            else:
+                st.caption("No topic performance data available yet. Seed the academic dataset to view this chart.")
 
             col_left, col_right = st.columns(2)
             with col_left:
                 st.subheader("CO Attainment")
-                co_df = pd.DataFrame([
+                co_rows_ov = [
                     {'CO': o['co_code'], 'Attainment %': o['attainment_pct'],
                      'Level': o['level_label']}
                     for o in co['outcomes']
-                ])
-                st.dataframe(co_df, use_container_width=True, hide_index=True)
+                ]
+                if co_rows_ov:
+                    co_df = pd.DataFrame(co_rows_ov)
+                    st.dataframe(co_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No CO attainment data available yet.")
 
             with col_right:
                 st.subheader("At-Risk Students (top 10)")

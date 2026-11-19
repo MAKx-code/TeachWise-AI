@@ -18,7 +18,7 @@ def get_model() -> ModelInference:
         api_key = os.getenv('WATSONX_API_KEY')
         project_id = os.getenv('WATSONX_PROJECT_ID')
         url = os.getenv('WATSONX_URL', 'https://us-south.ml.cloud.ibm.com')
-        model_id = os.getenv('WATSONX_MODEL_ID', 'ibm/granite-3-8b-instruct')
+        model_id = os.getenv('WATSONX_MODEL_ID', 'ibm/granite-4-h-small')
 
         if not api_key or not project_id:
             raise EnvironmentError(
