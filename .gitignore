@@ -10,3 +10,5 @@ uploads/
 instance/
 .DS_Store
 *.log
+
+.streamlit/secrets.toml
