@@ -56,6 +56,17 @@ _flask_app = _create_app()
 _app_ctx = _flask_app.app_context()
 _app_ctx.push()   # permanent context for the lifetime of this process
 
+# ── Academic dataset seed — runs once on first startup ────────────────────────
+# seed_academic_data() uses the already-active app context (no second Flask app,
+# no nested context push).  It is fully idempotent: returns False immediately if
+# Student rows already exist, so Streamlit reruns are free of overhead.
+try:
+    from seed_academic import seed_academic_data as _seed_academic
+    _seed_academic()
+except Exception as _seed_exc:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("Academic seed skipped: %s", _seed_exc)
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_flask_app():
