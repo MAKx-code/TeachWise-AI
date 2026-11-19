@@ -58,14 +58,39 @@ _app_ctx.push()   # permanent context for the lifetime of this process
 
 # ── Academic dataset seed — runs once on first startup ────────────────────────
 # seed_academic_data() uses the already-active app context (no second Flask app,
-# no nested context push).  It is fully idempotent: returns False immediately if
-# Student rows already exist, so Streamlit reruns are free of overhead.
+# no nested context push).  It is fully idempotent: skips if 45 students and
+# 1,800 attendance records are already present.  Detects and recovers partial
+# seeds automatically.
+import logging as _logging
+_seed_log = _logging.getLogger("teachwise.seed")
+
+# Emit DB URI to startup log so Cloud logs confirm which database is used.
+_db_uri = _flask_app.config.get("SQLALCHEMY_DATABASE_URI", "<not set>")
+_seed_log.info("TeachWise startup: DATABASE_URI=%s", _db_uri)
+
 try:
     from seed_academic import seed_academic_data as _seed_academic
-    _seed_academic()
+    _seeded = _seed_academic()
+    if _seeded:
+        # Log post-seed counts from the live DB for Cloud log verification.
+        from app.models import Student as _Stu, SyllabusUnit as _SU
+        from app.models import CourseOutcome as _CO, AttendanceRecord as _AR
+        _seed_log.info(
+            "TeachWise seed SUCCESS: students=%d  units=%d  COs=%d  attendance=%d",
+            _Stu.query.count(), _SU.query.count(), _CO.query.count(), _AR.query.count(),
+        )
+    else:
+        from app.models import Student as _Stu, AttendanceRecord as _AR
+        _seed_log.info(
+            "TeachWise seed SKIPPED (data present): students=%d  attendance=%d",
+            _Stu.query.count(), _AR.query.count(),
+        )
 except Exception as _seed_exc:
-    import logging as _logging
-    _logging.getLogger(__name__).warning("Academic seed skipped: %s", _seed_exc)
+    # Log full traceback so Streamlit Cloud logs capture the exact failure.
+    _seed_log.error(
+        "TeachWise seed FAILED — analytics will be empty until resolved.",
+        exc_info=True,
+    )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

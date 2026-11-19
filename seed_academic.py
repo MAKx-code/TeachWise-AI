@@ -48,16 +48,61 @@ def seed_academic_data():
     instance imported at the top of this module — no second Flask app is
     created, no nested context is pushed.
 
-    Idempotent: returns immediately if any Student records already exist.
-    Returns True if seeding ran, False if data was already present.
+    Idempotent: skips if the full dataset is already present (45 students +
+    1,800 attendance records).  Detects and recovers from partial seeds
+    (students exist but attendance records are missing or incomplete) by
+    rolling back the partial data and re-seeding cleanly.
+
+    Returns True if seeding ran, False if complete data was already present.
     """
     import logging
     log = logging.getLogger(__name__)
 
-    # Guard: idempotent — never duplicate
-    if Student.query.count() > 0:
-        log.info("Academic data already seeded. Skipping.")
+    student_count = Student.query.count()
+    att_count = AttendanceRecord.query.count()
+
+    # Complete seed already present — fast path
+    if student_count == 45 and att_count >= 1800:
+        log.info(
+            "CS201 academic data fully present: %d students, %d attendance records. Skipping.",
+            student_count, att_count,
+        )
         return False
+
+    # Partial seed detected — students exist but records are missing/incomplete.
+    # This can happen if a previous seed run crashed before commit.
+    # Roll back all partial academic data and re-seed from scratch.
+    if student_count > 0:
+        log.warning(
+            "Partial seed detected: %d students but only %d attendance records. "
+            "Rolling back partial data and re-seeding.",
+            student_count, att_count,
+        )
+        try:
+            # Delete in dependency order to satisfy FK constraints
+            db.session.query(StudentFeedback).delete()
+            db.session.query(AttendanceRecord).delete()
+            db.session.query(AttendanceClass).delete()
+            db.session.query(QuizResult).delete()
+            db.session.query(Quiz).delete()
+            db.session.query(AssignmentSubmission).delete()
+            db.session.query(Assignment).delete()
+            db.session.query(ExamMark).delete()
+            db.session.query(Exam).delete()
+            db.session.query(Question).delete()
+            db.session.query(LearningResource).delete()
+            db.session.query(CoUnitMapping).delete()
+            db.session.query(CourseOutcome).delete()
+            db.session.query(SyllabusUnit).delete()
+            db.session.query(Enrollment).delete()
+            db.session.query(Student).delete()
+            db.session.commit()
+            db.session.expire_all()  # clear identity map after bulk deletes
+            log.info("Partial seed data removed. Proceeding with clean seed.")
+        except Exception as rollback_exc:
+            db.session.rollback()
+            log.error("Failed to roll back partial seed: %s", rollback_exc, exc_info=True)
+            raise
 
     course = Course.query.filter_by(code='CS201').first()
     if not course:
@@ -346,8 +391,19 @@ def seed_academic_data():
     db.session.flush()
 
     db.session.commit()
-    log.info("CS201 academic seed complete. att_records=%s", att_records)
-    assert att_records == 1800, f"Expected 1800 attendance records, got {att_records}"
+
+    # Post-seed verification — confirm counts match expectations
+    final_students = Student.query.count()
+    final_units = SyllabusUnit.query.count()
+    final_cos = CourseOutcome.query.count()
+    final_att = AttendanceRecord.query.count()
+    log.info(
+        "CS201 seed complete. students=%d units=%d COs=%d attendance=%d",
+        final_students, final_units, final_cos, final_att,
+    )
+    assert att_records == 1800, f"Expected 1800 attendance records counted during seed, got {att_records}"
+    assert final_students == 45, f"Post-seed student count: expected 45, got {final_students}"
+    assert final_att >= 1800, f"Post-seed attendance count: expected >=1800, got {final_att}"
     return True
 
 
