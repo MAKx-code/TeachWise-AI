@@ -45,29 +45,34 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── Flask app initialization — module level, runs once per process ────────────
+# create_app() calls db.init_app(app) on the canonical db singleton from
+# app/__init__.py and pushes a permanent app context.  All Streamlit reruns
+# share this single initialized app — no duplicate SQLAlchemy instances.
+
+from app import create_app as _create_app, db as _db  # noqa: E402
+
+_flask_app = _create_app()
+_app_ctx = _flask_app.app_context()
+_app_ctx.push()   # permanent context for the lifetime of this process
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-@st.cache_resource
 def get_flask_app():
-    """Create Flask app once and cache it for the session."""
-    from app import create_app
-    return create_app()
+    """Return the already-initialized Flask app (no caching needed)."""
+    return _flask_app
 
 
 def db_analytics(course_id: int) -> dict:
-    """Run DB analytics inside Flask app context."""
-    flask_app = get_flask_app()
-    with flask_app.app_context():
-        from app.analytics import compute_full_analytics
-        return compute_full_analytics(course_id)
+    """Run DB analytics — app context is already active at module level."""
+    from app.analytics import compute_full_analytics
+    return compute_full_analytics(course_id)
 
 
 def get_courses() -> list[dict]:
-    flask_app = get_flask_app()
-    with flask_app.app_context():
-        from app.models import Course
-        return [{'id': c.id, 'name': c.name, 'code': c.code,
-                 'semester': c.semester} for c in Course.query.all()]
+    from app.models import Course
+    return [{'id': c.id, 'name': c.name, 'code': c.code,
+             'semester': c.semester} for c in Course.query.all()]
 
 
 def granite_available() -> bool:
@@ -595,44 +600,43 @@ elif page == "CO & Analytics":
         if st.button("Run Full AI Pipeline", type="primary"):
             with st.spinner("Running 6-stage AI pipeline... (may take 30-60s)"):
                 try:
-                    flask_app = get_flask_app()
-                    with flask_app.app_context():
-                        from app.analytics import (compute_topic_performance,
-                            compute_at_risk_students, compute_attendance_summary,
-                            compute_co_attainment)
-                        from app.agents.gap_detection import detect_gaps, ai_explain_gaps
-                        from app.agents.learning_support import generate_support_plan
-                        from app.agents.co_attainment import interpret_co_attainment
+                    # App context already active at module level
+                    from app.analytics import (compute_topic_performance,
+                        compute_at_risk_students, compute_attendance_summary,
+                        compute_co_attainment)
+                    from app.agents.gap_detection import detect_gaps, ai_explain_gaps
+                    from app.agents.learning_support import generate_support_plan
+                    from app.agents.co_attainment import interpret_co_attainment
 
-                        # Build gap data
-                        t_perf = compute_topic_performance(course_id)
-                        att_sum = compute_attendance_summary(course_id)
-                        at_risk_list = compute_at_risk_students(course_id)
-                        topic_stats = {
-                            t['title']: {'mean': t['combined_avg_pct'], 'below_50_pct': 0,
-                                         'below_40_pct': 0, 'median': t['combined_avg_pct'], 'std': 0}
-                            for t in t_perf if t.get('combined_avg_pct') is not None
-                        }
-                        gaps = detect_gaps(topic_stats)
-                        gaps = ai_explain_gaps(gaps, att_sum.get('total_students', 0))
+                    # Build gap data
+                    t_perf = compute_topic_performance(course_id)
+                    att_sum = compute_attendance_summary(course_id)
+                    at_risk_list = compute_at_risk_students(course_id)
+                    topic_stats = {
+                        t['title']: {'mean': t['combined_avg_pct'], 'below_50_pct': 0,
+                                     'below_40_pct': 0, 'median': t['combined_avg_pct'], 'std': 0}
+                        for t in t_perf if t.get('combined_avg_pct') is not None
+                    }
+                    gaps = detect_gaps(topic_stats)
+                    gaps = ai_explain_gaps(gaps, att_sum.get('total_students', 0))
 
-                        overall_avg = (sum(t['combined_avg_pct'] for t in t_perf if t.get('combined_avg_pct') is not None)
-                                       / max(1, sum(1 for t in t_perf if t.get('combined_avg_pct') is not None)))
-                        perf_for_support = {
-                            'num_students': att_sum.get('total_students', 0),
-                            'avg_attendance': att_sum.get('class_avg_pct'),
-                            'overall_avg_score': round(overall_avg, 1),
-                            'at_risk_students': at_risk_list,
-                        }
-                        support_plan = generate_support_plan(perf_for_support, gaps, selected.split('—')[-1].strip())
+                    overall_avg = (sum(t['combined_avg_pct'] for t in t_perf if t.get('combined_avg_pct') is not None)
+                                   / max(1, sum(1 for t in t_perf if t.get('combined_avg_pct') is not None)))
+                    perf_for_support = {
+                        'num_students': att_sum.get('total_students', 0),
+                        'avg_attendance': att_sum.get('class_avg_pct'),
+                        'overall_avg_score': round(overall_avg, 1),
+                        'at_risk_students': at_risk_list,
+                    }
+                    support_plan = generate_support_plan(perf_for_support, gaps, selected.split('—')[-1].strip())
 
-                        co_att = compute_co_attainment(course_id)
-                        co_interp = interpret_co_attainment(co_att, selected.split('—')[-1].strip())
+                    co_att = compute_co_attainment(course_id)
+                    co_interp = interpret_co_attainment(co_att, selected.split('—')[-1].strip())
 
-                        st.session_state['ai_pipeline'] = {
-                            'gaps': gaps, 'support_plan': support_plan,
-                            'co_interp': co_interp,
-                        }
+                    st.session_state['ai_pipeline'] = {
+                        'gaps': gaps, 'support_plan': support_plan,
+                        'co_interp': co_interp,
+                    }
                 except Exception as exc:
                     st.error(f"Pipeline error: {exc}")
 
@@ -680,26 +684,26 @@ elif page == "Learning Support":
         st.warning("CS201 not found. Run seed_academic.py first.")
         st.stop()
 
-    flask_app = get_flask_app()
-    with flask_app.app_context():
-        from app.analytics import compute_topic_performance, compute_at_risk_students
-        from app.models import LearningResource, SyllabusUnit
+    # App context is already active at module level (_app_ctx.push()).
+    # No additional context wrapper needed here.
+    from app.analytics import compute_topic_performance, compute_at_risk_students
+    from app.models import LearningResource
 
-        tp = compute_topic_performance(cs201['id'])
-        at_risk = compute_at_risk_students(cs201['id'])
-        weak = [t for t in tp if t['gap_severity'] in ('Critical', 'Significant', 'Moderate')]
+    tp = compute_topic_performance(cs201['id'])
+    at_risk = compute_at_risk_students(cs201['id'])
+    weak = [t for t in tp if t['gap_severity'] in ('Critical', 'Significant', 'Moderate')]
 
-        # Fetch resources for weak units
-        weak_resources = {}
-        for t in weak:
-            res = LearningResource.query.filter_by(
-                course_id=cs201['id'], unit_id=t['unit_id']).all()
-            weak_resources[t['unit_id']] = {
-                'title': t['title'], 'severity': t['gap_severity'],
-                'score': t['combined_avg_pct'],
-                'resources': [{'title': r.title, 'type': r.resource_type, 'url': r.url_or_path}
-                              for r in res],
-            }
+    # Fetch resources for weak units
+    weak_resources = {}
+    for t in weak:
+        res = LearningResource.query.filter_by(
+            course_id=cs201['id'], unit_id=t['unit_id']).all()
+        weak_resources[t['unit_id']] = {
+            'title': t['title'], 'severity': t['gap_severity'],
+            'score': t['combined_avg_pct'],
+            'resources': [{'title': r.title, 'type': r.resource_type, 'url': r.url_or_path}
+                          for r in res],
+        }
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Topics", len(tp))
