@@ -7,9 +7,16 @@ env/
 .venv/
 *.db
 *.sqlite3
+*.bak
 instance/
 uploads/
 .git/
 .gitignore
 *.md
-test_app.py
+test_*.py
+_check_db.py
+boot.py
+acceptance_test.py
+check_*.py
+debug_*.py
+verify_*.py

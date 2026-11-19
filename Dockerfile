@@ -16,6 +16,12 @@
 #     --env WATSONX_MODEL_ID=ibm/granite-3-8b-instruct \
 #     --env SECRET_KEY=<random-secret> \
 #     --env DATABASE_URL=sqlite:///teachwise.db
+#
+# SQLite persistence note:
+#   Code Engine containers are stateless. The SQLite DB is seeded fresh on
+#   every cold start via start.sh → seed_academic.py (idempotent).
+#   User uploads and generated content are lost on restart.
+#   For persistent storage, set DATABASE_URL to a PostgreSQL connection string.
 
 FROM python:3.11-slim
 
@@ -25,18 +31,21 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code (never copy .env)
+# Copy all required application files
 COPY app/ app/
 COPY data/ data/
+COPY migrations/ migrations/
 COPY run.py .
+COPY seed_academic.py .
+COPY start.sh .
 
-# Create uploads directory
-RUN mkdir -p uploads
+# Create uploads directory and make start.sh executable
+RUN mkdir -p uploads && chmod +x start.sh
 
 # Code Engine uses PORT env var; default 8080 matches CE convention
 ENV PORT=8080
 
 EXPOSE 8080
 
-# Use Gunicorn for production; 2 workers, 120s timeout for Granite calls
-CMD gunicorn run:app --bind 0.0.0.0:${PORT} --workers 2 --timeout 120
+# start.sh: seeds CS201 dataset (idempotent), then launches Gunicorn
+CMD ["./start.sh"]

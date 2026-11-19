@@ -4,10 +4,11 @@ nixPkgs = ["python311"]
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
 
-[phases.build]
-# seed_academic.py is idempotent (skips if already seeded)
-# It first runs create_app() which creates all DB tables, then seeds CS201 data
-cmds = ["python seed_academic.py"]
+# Note: seeding is NOT done at build time because Railway's build filesystem
+# is separate from the runtime filesystem on most plans.
+# Seeding happens at start time via the start command below.
 
 [start]
-cmd = "gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+# seed_academic.py is idempotent — safe to run on every container start.
+# It calls create_app() which creates all DB tables, then seeds CS201 data.
+cmd = "python seed_academic.py && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"

@@ -122,10 +122,14 @@ if page == "Overview":
             with c1:
                 st.metric("Students", att['total_students'])
             with c2:
-                st.metric("Avg Attendance", f"{att['class_avg_pct']}%",
-                          delta=f"{att['class_avg_pct'] - 75:.1f}% vs 75% threshold")
+                avg_att = att['class_avg_pct']
+                st.metric("Avg Attendance",
+                          f"{avg_att}%" if avg_att is not None else "N/A",
+                          delta=f"{avg_att - 75:.1f}% vs 75% threshold" if avg_att is not None else None)
             with c3:
-                st.metric("CO Attainment", f"{co['overall_attainment_pct']}%",
+                overall_att = co['overall_attainment_pct']
+                st.metric("CO Attainment",
+                          f"{overall_att}%" if overall_att is not None else "N/A",
                           delta=f"{co['attained_count']}/{len(co['outcomes'])} COs attained")
             with c4:
                 st.metric("At-Risk Students", len(at_risk),
@@ -522,8 +526,10 @@ elif page == "CO & Analytics":
     # Summary stats
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Students", att['total_students'])
-    c2.metric("Avg Attendance", f"{att['class_avg_pct']}%")
-    c3.metric("CO Attainment", f"{co['overall_attainment_pct']}%")
+    _avg_att = att['class_avg_pct']
+    c2.metric("Avg Attendance", f"{_avg_att}%" if _avg_att is not None else "N/A")
+    _co_att = co['overall_attainment_pct']
+    c3.metric("CO Attainment", f"{_co_att}%" if _co_att is not None else "N/A")
     c4.metric("At-Risk", len(at_risk))
 
     st.divider()
@@ -540,18 +546,26 @@ elif page == "CO & Analytics":
                 'Severity': t['gap_severity'],
             } for t in tp])
             st.dataframe(tp_df, use_container_width=True, hide_index=True)
-            st.bar_chart(tp_df.set_index('Topic')['Combined %'].dropna())
+            tp_chart = tp_df[tp_df['Combined %'].notna()].set_index('Topic')['Combined %']
+            if not tp_chart.empty:
+                st.bar_chart(tp_chart)
 
     with col_right:
         st.subheader("CO Attainment")
-        co_df = pd.DataFrame([{
+        co_rows = [{
             'CO': o['co_code'],
             'Bloom': o['bloom_level'],
             'Attainment %': o['attainment_pct'],
             'Level': o['level_label'],
-        } for o in co['outcomes']])
-        st.dataframe(co_df, use_container_width=True, hide_index=True)
-        st.bar_chart(co_df.set_index('CO')['Attainment %'].dropna())
+        } for o in co['outcomes']]
+        if co_rows:
+            co_df = pd.DataFrame(co_rows)
+            st.dataframe(co_df, use_container_width=True, hide_index=True)
+            co_chart = co_df[co_df['Attainment %'].notna()].set_index('CO')['Attainment %']
+            if not co_chart.empty:
+                st.bar_chart(co_chart)
+        else:
+            st.caption("No CO attainment data available.")
 
     # Attendance distribution
     st.subheader("Attendance Distribution")

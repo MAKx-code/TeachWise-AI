@@ -1,19 +1,38 @@
+# render.yaml — Render.com deployment for TeachWise AI
+#
+# SQLite persistence note:
+#   Render's free tier uses an ephemeral filesystem. The SQLite database is
+#   seeded fresh on every deploy/restart via the startCommand below.
+#   The CS201 synthetic academic dataset (45 students, 1800 records) is
+#   re-seeded automatically — it is idempotent and safe to run on every start.
+#   User-uploaded CSVs and AI-generated content (lesson plans, assessments,
+#   analysis sessions) are NOT persistent across restarts on the free tier.
+#   For persistent storage, add a Render PostgreSQL database and set
+#   DATABASE_URL to the internal connection string provided by Render.
+#
+# Secrets that must be set in Render dashboard (never committed to repo):
+#   WATSONX_API_KEY, WATSONX_PROJECT_ID
+
 services:
   - type: web
     name: teachwise-ai
     runtime: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    # startCommand runs seed_academic.py (idempotent) then starts Gunicorn.
+    # Using sh -c to chain commands; seed is a no-op if already seeded.
+    startCommand: "python seed_academic.py && gunicorn run:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
     envVars:
       - key: WATSONX_API_KEY
-        sync: false
+        sync: false          # Must be set manually in Render dashboard
       - key: WATSONX_PROJECT_ID
-        sync: false
+        sync: false          # Must be set manually in Render dashboard
       - key: WATSONX_URL
         value: https://us-south.ml.cloud.ibm.com
       - key: WATSONX_MODEL_ID
         value: ibm/granite-3-8b-instruct
       - key: SECRET_KEY
-        generateValue: true
+        generateValue: true  # Render generates a random value automatically
       - key: DATABASE_URL
         value: sqlite:///teachwise.db
+        # For persistence: replace with Render PostgreSQL internal URL
+        # value: postgresql://user:pass@host/dbname
