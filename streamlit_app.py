@@ -76,22 +76,6 @@ st.markdown("""
   border-color: var(--walnut) !important;
   opacity: 0.6;
 }
-/* Radio buttons in sidebar */
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-  color: var(--champagne) !important;
-  font-family: 'Inter', sans-serif !important;
-  font-size: 0.88rem !important;
-  font-weight: 400 !important;
-  padding: 6px 0 !important;
-  letter-spacing: 0.01em;
-  transition: color 0.15s ease;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-  color: var(--amber) !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] [data-baseweb="radio"] {
-  accent-color: var(--amber) !important;
-}
 
 /* ── Headings ────────────────────────────────────────────────────────────── */
 h1 {
@@ -475,6 +459,61 @@ hr {
   padding: 14px 20px 4px;
 }
 
+/* Custom nav item */
+.tw-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--champagne);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+.tw-nav-item:hover {
+  color: var(--amber);
+  background: rgba(213,133,31,0.07);
+  border-left-color: rgba(213,133,31,0.4);
+}
+.tw-nav-item.active {
+  color: var(--amber);
+  background: rgba(213,133,31,0.1);
+  border-left-color: var(--amber);
+  font-weight: 600;
+}
+.tw-nav-icon {
+  font-size: 0.95rem;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Hide Streamlit nav button default styles when used as trigger */
+div[data-testid="stSidebar"] .stButton > button {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  color: var(--champagne) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 0.88rem !important;
+  font-weight: 400 !important;
+  width: 100%;
+  text-align: left;
+  box-shadow: none !important;
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+}
+div[data-testid="stSidebar"] .stButton > button:hover {
+  color: var(--amber) !important;
+  background: rgba(213,133,31,0.07) !important;
+}
+
 /* Status badge */
 .tw-status-ok {
   display: inline-flex;
@@ -613,6 +652,17 @@ def _section(label: str):
     st.markdown(f'<div class="tw-section-label">{label}</div>', unsafe_allow_html=True)
 
 
+def _col_header(label: str):
+    """Safe section header for use inside st.columns — uses native Streamlit."""
+    st.markdown(
+        f'<p style="font-family:Inter,sans-serif;font-size:0.72rem;font-weight:700;'
+        f'color:#9C8A72;text-transform:uppercase;letter-spacing:0.1em;'
+        f'margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #C8B89A;">'
+        f'{label}</p>',
+        unsafe_allow_html=True
+    )
+
+
 def _advisory(msg: str):
     st.markdown(f'<div class="advisory-box">⚑ {msg}</div>', unsafe_allow_html=True)
 
@@ -628,16 +678,89 @@ def _gap_card(sev: str, title: str, meta: str, intervention: str = ""):
     </div>""", unsafe_allow_html=True)
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-NAV_ICONS = {
-    "Overview":           "◈",
-    "Lesson Studio":      "✦",
-    "Teaching Materials": "▤",
-    "Assessment Studio":  "◎",
-    "Student Analytics":  "◉",
-    "CO & Analytics":     "◐",
-    "Learning Support":   "◑",
-}
+# ── Plotly chart helpers ──────────────────────────────────────────────────────
+def _plotly_bar(labels, values, color: str = "#D5851F", height: int = 260,
+                y_title: str = "%", show_legend: bool = False):
+    """Minimal Plotly horizontal bar for analytics panels."""
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure(go.Bar(
+            x=labels, y=values,
+            marker_color=color,
+            marker_line_width=0,
+        ))
+        fig.update_layout(
+            height=height,
+            margin=dict(l=0, r=0, t=10, b=40),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter, sans-serif", size=11, color="#6B5C4A"),
+            yaxis=dict(
+                title=y_title,
+                gridcolor="rgba(200,184,154,0.3)",
+                zeroline=False,
+            ),
+            xaxis=dict(
+                tickfont=dict(size=10),
+            ),
+            showlegend=show_legend,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    except ImportError:
+        # Fallback to st.bar_chart if plotly not available
+        import pandas as _pd
+        _df = _pd.DataFrame({"value": values}, index=labels)
+        st.bar_chart(_df, color=color, height=height, use_container_width=True)
+
+
+def _plotly_multibar(labels, series: list[dict], height: int = 280):
+    """Multi-series grouped bar chart."""
+    COLORS = ["#D5851F", "#A88462", "#87A968", "#3A2418"]
+    try:
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        for i, s in enumerate(series):
+            fig.add_trace(go.Bar(
+                name=s['name'], x=labels, y=s['data'],
+                marker_color=COLORS[i % len(COLORS)],
+                marker_line_width=0,
+            ))
+        fig.update_layout(
+            barmode="group",
+            height=height,
+            margin=dict(l=0, r=0, t=10, b=40),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Inter, sans-serif", size=11, color="#6B5C4A"),
+            yaxis=dict(gridcolor="rgba(200,184,154,0.3)", zeroline=False),
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1.02,
+                xanchor="right", x=1,
+                font=dict(size=10),
+            ),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    except ImportError:
+        import pandas as _pd
+        _d = {s['name']: s['data'] for s in series}
+        _d['_idx'] = labels
+        st.bar_chart(_pd.DataFrame(_d).set_index('_idx'), height=height, use_container_width=True)
+
+
+# ── Sidebar navigation ────────────────────────────────────────────────────────
+NAV_PAGES = [
+    ("Overview",           "◈"),
+    ("Lesson Studio",      "✦"),
+    ("Teaching Materials", "▤"),
+    ("Assessment Studio",  "◎"),
+    ("Student Analytics",  "◉"),
+    ("CO & Analytics",     "◐"),
+    ("Learning Support",   "◑"),
+]
+
+# Initialise default page in session state
+if "page" not in st.session_state:
+    st.session_state["page"] = "Overview"
 
 with st.sidebar:
     st.markdown("""
@@ -649,14 +772,21 @@ with st.sidebar:
 
     st.markdown('<div class="tw-nav-label">Navigation</div>', unsafe_allow_html=True)
 
-    page = st.radio(
-        "Navigate",
-        ["Overview", "Lesson Studio", "Teaching Materials",
-         "Assessment Studio", "Student Analytics", "CO & Analytics",
-         "Learning Support"],
-        label_visibility="collapsed",
-        format_func=lambda x: f"{NAV_ICONS.get(x, '·')}  {x}",
-    )
+    for _pg_name, _pg_icon in NAV_PAGES:
+        _is_active = st.session_state["page"] == _pg_name
+        _btn_label = f"{_pg_icon}  {_pg_name}"
+        # Active page gets an amber underline via inline style injected before the button
+        if _is_active:
+            st.markdown(
+                f'<div style="border-left:3px solid #D5851F;margin:0;padding:0;'
+                f'background:rgba(213,133,31,0.08);">',
+                unsafe_allow_html=True,
+            )
+        if st.button(_btn_label, key=f"nav_{_pg_name}", use_container_width=True):
+            st.session_state["page"] = _pg_name
+            st.rerun()
+        if _is_active:
+            st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -676,6 +806,8 @@ with st.sidebar:
       Plan Better.<br>Teach Smarter.<br>Support Every Learner.
     </div>
     """, unsafe_allow_html=True)
+
+page = st.session_state["page"]
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -729,10 +861,10 @@ if page == "Overview":
                 for t in tp if t['combined_avg_pct'] is not None
             ])
             if not chart_df.empty:
-                st.bar_chart(
-                    chart_df.set_index('Topic')['Combined Avg %'],
+                _plotly_bar(
+                    chart_df['Topic'].tolist(),
+                    chart_df['Combined Avg %'].tolist(),
                     color="#D5851F",
-                    use_container_width=True,
                     height=240,
                 )
             else:
@@ -741,9 +873,9 @@ if page == "Overview":
             st.divider()
 
             # ── CO + at-risk side by side ──────────────────────────────────────
-            col_left, col_right = st.columns(2, gap="large")
+            col_left, col_right = st.columns(2)
             with col_left:
-                _section("Course Outcome Attainment")
+                _col_header("Course Outcome Attainment")
                 co_rows_ov = [
                     {'CO': o['co_code'], 'Attainment %': o['attainment_pct'],
                      'Level': o['level_label']}
@@ -752,11 +884,16 @@ if page == "Overview":
                 if co_rows_ov:
                     st.dataframe(pd.DataFrame(co_rows_ov),
                                  use_container_width=True, hide_index=True)
+                    _plotly_bar(
+                        [r['CO'] for r in co_rows_ov],
+                        [r['Attainment %'] for r in co_rows_ov],
+                        color="#A88462", height=180,
+                    )
                 else:
                     st.caption("No CO attainment data available yet.")
 
             with col_right:
-                _section("At-Risk Students (top 10)")
+                _col_header("At-Risk Students (top 10)")
                 if at_risk:
                     risk_df = pd.DataFrame([
                         {'Student': s['student_code'],
@@ -793,7 +930,7 @@ elif page == "Lesson Studio":
         st.stop()
 
     with st.form("lesson_form"):
-        col1, col2 = st.columns(2, gap="large")
+        col1, col2 = st.columns(2)
         with col1:
             subject  = st.text_input("Subject / Course", value="Data Structures & Algorithms")
             topic    = st.text_input("Topic", value="Binary Search Trees")
@@ -849,7 +986,7 @@ elif page == "Teaching Materials":
         st.stop()
 
     with st.form("material_form"):
-        col1, col2 = st.columns(2, gap="large")
+        col1, col2 = st.columns(2)
         with col1:
             course_name = st.text_input("Course", value="Data Structures & Algorithms")
             topic       = st.text_input("Topic", value="Graph Traversal: BFS and DFS")
@@ -904,7 +1041,7 @@ elif page == "Assessment Studio":
         st.stop()
 
     with st.form("assess_form"):
-        col1, col2 = st.columns(2, gap="large")
+        col1, col2 = st.columns(2)
         with col1:
             topic      = st.text_input("Topic", value="Linked Lists")
             difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"])
@@ -1009,7 +1146,6 @@ elif page == "Student Analytics":
                 st.warning(w)
 
         progress = st.progress(0, text="Stage 1/6: Validating data…")
-        result = {}
 
         with st.spinner("Running 6-stage analysis pipeline…"):
             try:
@@ -1025,6 +1161,7 @@ elif page == "Student Analytics":
             st.stop()
 
         st.session_state['pipeline_result'] = result
+        st.rerun()
 
     if 'pipeline_result' in st.session_state:
         result    = st.session_state['pipeline_result']
@@ -1034,7 +1171,7 @@ elif page == "Student Analytics":
         support   = result.get('support_plan') or {}
 
         # Stage log
-        with st.expander("Pipeline Stage Log", expanded=True):
+        with st.expander("Pipeline Stage Log", expanded=False):
             for s in stage_log:
                 if s['status'] == 'success':
                     icon, css = "✓", "stage-ok"
@@ -1060,13 +1197,9 @@ elif page == "Student Analytics":
         topic_stats = perf.get('topic_stats', {})
         if topic_stats:
             _section("Topic Performance")
-            ts_df = pd.DataFrame([
-                {'Topic': k.replace('quiz_', '').replace('_', ' ').title(),
-                 'Mean %': v['mean'], 'Below 50%': v['below_50_pct']}
-                for k, v in topic_stats.items()
-            ])
-            st.bar_chart(ts_df.set_index('Topic')['Mean %'],
-                         color="#D5851F", height=220, use_container_width=True)
+            ts_labels = [k.replace('quiz_', '').replace('_', ' ').title() for k in topic_stats]
+            ts_means  = [v['mean'] for v in topic_stats.values()]
+            _plotly_bar(ts_labels, ts_means, color="#D5851F", height=240)
 
         # Gaps
         if gaps:
@@ -1096,6 +1229,10 @@ elif page == "Student Analytics":
                             st.markdown(f"- {act}")
             _advisory("These recommendations are advisory. Faculty should review before sharing with students.")
 
+        if st.button("Clear Results", type="secondary"):
+            del st.session_state['pipeline_result']
+            st.rerun()
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # PAGE: CO & ANALYTICS
@@ -1109,6 +1246,10 @@ elif page == "CO & Analytics":
 
     courses = get_courses()
     course_options = {f"{c['code']} — {c['name']}": c['id'] for c in courses}
+    if not course_options:
+        st.warning("No courses found. Run `python seed_academic.py` first.")
+        st.stop()
+
     selected   = st.selectbox("Course", list(course_options.keys()))
     course_id  = course_options[selected]
 
@@ -1134,41 +1275,56 @@ elif page == "CO & Analytics":
     c4.metric("At-Risk", len(at_risk))
 
     st.divider()
-    col_left, col_right = st.columns(2, gap="large")
 
-    with col_left:
-        _section("Topic Performance")
-        if tp:
-            tp_df = pd.DataFrame([{
-                'Topic': t['title'],
-                'Quiz Avg %': t['quiz_avg_pct'],
-                'Assign Avg %': t['assignment_avg_pct'],
-                'Combined %': t['combined_avg_pct'],
-                'Severity': t['gap_severity'],
-            } for t in tp])
-            st.dataframe(tp_df, use_container_width=True, hide_index=True)
-            tp_chart = tp_df[tp_df['Combined %'].notna()].set_index('Topic')['Combined %']
-            if not tp_chart.empty:
-                st.bar_chart(tp_chart, color="#D5851F", height=200, use_container_width=True)
+    # Topic performance (full width)
+    _section("Topic Performance")
+    if tp:
+        tp_df = pd.DataFrame([{
+            'Topic': t['title'],
+            'Quiz Avg %': t['quiz_avg_pct'],
+            'Assign Avg %': t['assignment_avg_pct'],
+            'Combined %': t['combined_avg_pct'],
+            'Severity': t['gap_severity'],
+        } for t in tp])
+        st.dataframe(tp_df, use_container_width=True, hide_index=True)
 
-    with col_right:
-        _section("Course Outcome Attainment")
-        co_rows = [{
-            'CO': o['co_code'],
-            'Bloom': o['bloom_level'],
-            'Attainment %': o['attainment_pct'],
-            'Level': o['level_label'],
-        } for o in co['outcomes']]
-        if co_rows:
-            co_df = pd.DataFrame(co_rows)
-            st.dataframe(co_df, use_container_width=True, hide_index=True)
-            co_chart = co_df[co_df['Attainment %'].notna()].set_index('CO')['Attainment %']
-            if not co_chart.empty:
-                st.bar_chart(co_chart, color="#A88462", height=200, use_container_width=True)
-        else:
-            st.caption("No CO attainment data available.")
+        tp_valid = tp_df[tp_df['Combined %'].notna()]
+        if not tp_valid.empty:
+            _plotly_multibar(
+                tp_valid['Topic'].tolist(),
+                [
+                    {'name': 'Quiz Avg %',   'data': tp_valid['Quiz Avg %'].fillna(0).tolist()},
+                    {'name': 'Assign Avg %', 'data': tp_valid['Assign Avg %'].fillna(0).tolist()},
+                    {'name': 'Combined %',   'data': tp_valid['Combined %'].tolist()},
+                ],
+                height=300,
+            )
+
+    st.divider()
+
+    # CO attainment
+    _section("Course Outcome Attainment")
+    co_rows = [{
+        'CO': o['co_code'],
+        'Bloom': o['bloom_level'],
+        'Attainment %': o['attainment_pct'],
+        'Level': o['level_label'],
+    } for o in co['outcomes']]
+    if co_rows:
+        co_df = pd.DataFrame(co_rows)
+        st.dataframe(co_df, use_container_width=True, hide_index=True)
+        co_valid = co_df[co_df['Attainment %'].notna()]
+        if not co_valid.empty:
+            _plotly_bar(
+                co_valid['CO'].tolist(),
+                co_valid['Attainment %'].tolist(),
+                color="#A88462", height=200,
+            )
+    else:
+        st.caption("No CO attainment data available.")
 
     # Attendance distribution
+    st.divider()
     _section("Attendance Distribution")
     dist = att.get('distribution', {})
     if dist:
@@ -1178,14 +1334,13 @@ elif page == "CO & Analytics":
             '75_to_90': '75–90%',
             'above_90': '> 90%',
         }
-        dist_df = pd.DataFrame([
-            {'Band': band_labels.get(k, k), 'Students': v}
-            for k, v in dist.items()
-        ])
-        st.bar_chart(dist_df.set_index('Band'), color="#87A968", height=180, use_container_width=True)
+        dist_labels = [band_labels.get(k, k) for k in dist]
+        dist_values = list(dist.values())
+        _plotly_bar(dist_labels, dist_values, color="#87A968", height=200, y_title="Students")
 
     # At-risk table
     if at_risk:
+        st.divider()
         _section(f"At-Risk Students ({len(at_risk)})")
         st.caption("Criteria: attendance < 60% OR avg score < 50%. Review individually before action.")
         risk_df = pd.DataFrame([{
